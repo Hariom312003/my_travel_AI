@@ -1,0 +1,9 @@
+.venv/
+.env
+memory/
+rag_data/
+__pycache__/
+*.pyc
+chromadb/
+logs/
+.cache/
