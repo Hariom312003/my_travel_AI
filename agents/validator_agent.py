@@ -180,7 +180,7 @@ def validate_itinerary(
                 )
                 off_dest_hits = _contains_any(full_text, off_destination_names)
                 invalid_location = _norm(location) not in allowed_norm
-                duplicate = location in used_locations
+                duplicate = location in global_used_locations
                 if invalid_location or off_dest_hits or duplicate:
                     reason = []
                     if invalid_location:
@@ -190,7 +190,7 @@ def validate_itinerary(
                     if duplicate:
                         reason.append("duplicate_activity")
                         duplicate_activities.append({"day": day_number, "slot": slot, "location": location})
-                    replacement_doc = _pick_replacement(docs, used_locations)
+                    replacement_doc = _pick_replacement(docs, global_used_locations)
                     replacement = _replacement_item(replacement_doc, slot, day_number, relaxed)
                     fixed_items.append(replacement)
                     used_locations.add(replacement_doc.get("name", ""))
@@ -232,15 +232,19 @@ def validate_itinerary(
     if diversity_warnings:
         # Repair simple one-note schedules by replacing the first repeated evening with a different category.
         used = set(global_used_locations)
+        changed_days_allowed = structured_query.get("_changed_days", [])
         for day in repaired.get("days", []) or []:
+            day_number = int(day.get("day", 1))
+            if changed_days_allowed and day_number not in changed_days_allowed:
+                continue
             evening = day.get("evening", [])
             if not evening:
                 continue
             replacement_doc = _pick_replacement(docs, used, preferred_category="culture")
             if replacement_doc.get("name") in used:
                 replacement_doc = _pick_replacement(docs, used)
-            evening[0] = _replacement_item(replacement_doc, "evening", int(day.get("day", 1)), relaxed)
-            repaired_days.add(int(day.get("day", 1)))
+            evening[0] = _replacement_item(replacement_doc, "evening", day_number, relaxed)
+            repaired_days.add(day_number)
             break
 
     repaired = sanitize_user_plan(repaired, destination, allowed)

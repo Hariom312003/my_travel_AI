@@ -6,24 +6,7 @@ import os
 import re
 from typing import Any, Iterable
 
-from langchain.schema import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-
-
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-
-
-def llm_available() -> bool:
-    return bool(os.getenv("OPENAI_API_KEY"))
-
-
-def get_llm(temperature: float = 0.2) -> ChatOpenAI | None:
-    if not llm_available():
-        return None
-    try:
-        return ChatOpenAI(model=DEFAULT_MODEL, temperature=temperature, timeout=60, max_retries=2)
-    except Exception:
-        return None
+from agents.llm import generate
 
 
 def strip_json_markdown(text: str) -> str:
@@ -35,11 +18,10 @@ def strip_json_markdown(text: str) -> str:
 
 
 def invoke_text(system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str | None:
-    llm = get_llm(temperature=temperature)
-    if not llm:
+    try:
+        return generate(user_prompt, system_prompt=system_prompt, temperature=temperature)
+    except Exception:
         return None
-    response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
-    return response.content
 
 
 def invoke_json(system_prompt: str, user_prompt: str, fallback: Any, temperature: float = 0.1) -> Any:

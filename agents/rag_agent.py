@@ -1,4 +1,4 @@
-"""RAG Agent - retrieves destination knowledge from ChromaDB with safe local fallback."""
+"""RAG Agent - retrieves destination knowledge from ChromaDB with advanced metadata fields."""
 from __future__ import annotations
 
 import json
@@ -22,21 +22,22 @@ from agents.constants import (
 )
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "../memory/chroma_db")
-COLLECTION = "travel_knowledge_v2"
+COLLECTION = "travel_knowledge_v3"  # v3 for expanded metadata fields
 
 class SimpleEmbeddingFunction:
     """Small deterministic embedding function for local/dev runs without API keys."""
 
-    def __call__(self, input: list[str]) -> list[list[float]]:  # Chroma expects this name.
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        import hashlib
         vectors = []
         for text in input:
             buckets = [0.0] * 64
             for token in re.findall(r"[a-z0-9]+", text.lower()):
-                buckets[hash(token) % len(buckets)] += 1.0
+                h_val = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
+                buckets[h_val % len(buckets)] += 1.0
             norm = sum(v * v for v in buckets) ** 0.5 or 1.0
             vectors.append([v / norm for v in buckets])
         return vectors
-
 
 def get_embedding_function():
     if os.getenv("OPENAI_API_KEY"):
@@ -61,10 +62,12 @@ def _load_data() -> list[dict[str, Any]]:
 def ingest_travel_data():
     client = get_client()
     embedding_function = get_embedding_function()
+    data = _load_data()
     try:
         col = client.get_collection(COLLECTION, embedding_function=embedding_function)
-        if col.count() > 0:
+        if col.count() == len(data):
             return
+        client.delete_collection(COLLECTION)
     except Exception:
         pass
     col = client.get_or_create_collection(COLLECTION, embedding_function=embedding_function)
@@ -78,6 +81,8 @@ def ingest_travel_data():
         ids.append(f"travel_{i}")
         destination = item["location"]
         category = item.get("type", "")
+        
+        # Ingest all 12 Advanced RAG fields as metadata
         metas.append({
             "place": item["place"],
             "destination": destination,
@@ -85,6 +90,18 @@ def ingest_travel_data():
             "category": category,
             "type": category,
             "tags": ",".join(item.get("tags", [])),
+            "food": item.get("food", ""),
+            "nightlife": item.get("nightlife", ""),
+            "culture": item.get("culture", ""),
+            "shopping": item.get("shopping", ""),
+            "nature": item.get("nature", ""),
+            "adventure": item.get("adventure", ""),
+            "hidden_gems": item.get("hidden_gems", ""),
+            "transport_tips": item.get("transport", "Local transit"),
+            "local_tips": item.get("local_tips", ""),
+            "recommended_duration": item.get("duration", "2 hours"),
+            "best_visiting_time": item.get("best_time", "morning"),
+            "budget_category": item.get("pricing", "budget"),
         })
     col.add(documents=docs, ids=ids, metadatas=metas)
 
@@ -115,18 +132,11 @@ def retrieve_travel_documents(destination: str, interests: list, n: int = 8) -> 
     ranked.sort(key=lambda pair: pair[0], reverse=True)
     return [item for _, item in ranked[:n]]
 
-
 def place_entity(item: dict[str, Any]) -> dict[str, Any]:
     tags = item.get("tags", []) or []
     category = item.get("type", "place")
-    ideal_time = "morning"
-    if category in {"shopping", "food", "cafe/culture"} or "evening" in tags or "nightlife" in tags:
-        ideal_time = "evening"
-    elif category in {"adventure", "nature", "beach"}:
-        ideal_time = "afternoon"
-    duration_hours = 3 if category in {"adventure", "nature"} else 2
-    if category in {"shopping", "food"}:
-        duration_hours = 1.5
+    ideal_time = item.get("best_time", "morning")
+    
     return {
         "name": item.get("place", ""),
         "destination": item.get("location", ""),
@@ -134,9 +144,22 @@ def place_entity(item: dict[str, Any]) -> dict[str, Any]:
         "tags": tags,
         "crowd_level": "crowded" if "crowded" in tags else "quiet" if any(tag in tags for tag in ["hidden gem", "relaxed", "calm"]) else "normal",
         "ideal_time": ideal_time,
-        "duration_hours": duration_hours,
+        "duration_hours": 3 if category in {"adventure", "nature"} else 2,
+        
+        # Advanced RAG Fields
+        "food": item.get("food", ""),
+        "nightlife": item.get("nightlife", ""),
+        "culture": item.get("culture", ""),
+        "shopping": item.get("shopping", ""),
+        "nature": item.get("nature", ""),
+        "adventure": item.get("adventure", ""),
+        "hidden_gems": item.get("hidden_gems", ""),
+        "transport_tips": item.get("transport", "Local transit"),
+        "local_tips": item.get("local_tips", ""),
+        "recommended_duration": item.get("duration", "2 hours"),
+        "best_visiting_time": ideal_time,
+        "budget_category": item.get("pricing", "budget"),
     }
-
 
 def retrieve_place_entities(destination: str, interests: list, n: int = 12) -> list[dict[str, Any]]:
     destination = normalize_destination(destination)
@@ -160,6 +183,18 @@ def retrieve_place_entities(destination: str, interests: list, n: int = 12) -> l
                     "location": metadata.get("destination", destination),
                     "type": category,
                     "tags": tags,
+                    "food": metadata.get("food", ""),
+                    "nightlife": metadata.get("nightlife", ""),
+                    "culture": metadata.get("culture", ""),
+                    "shopping": metadata.get("shopping", ""),
+                    "nature": metadata.get("nature", ""),
+                    "adventure": metadata.get("adventure", ""),
+                    "hidden_gems": metadata.get("hidden_gems", ""),
+                    "transport": metadata.get("transport_tips", "Local transit"),
+                    "local_tips": metadata.get("local_tips", ""),
+                    "duration": metadata.get("recommended_duration", "2 hours"),
+                    "best_time": metadata.get("best_visiting_time", "morning"),
+                    "pricing": metadata.get("budget_category", "budget"),
                 })
                 if entity["destination"].lower() == destination.lower():
                     entities.append(entity)
@@ -172,7 +207,6 @@ def retrieve_place_entities(destination: str, interests: list, n: int = 12) -> l
         for item in retrieve_travel_documents(destination, interests, n=n)
         if item.get("location", "").lower() == destination.lower()
     ]
-
 
 def retrieve_travel_context(destination: str, interests: list, n: int = 8) -> str:
     """Legacy compatibility: return compact structured entities, never prose."""

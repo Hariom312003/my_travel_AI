@@ -1,9 +1,9 @@
 .venv/
 .env
-memory/
-rag_data/
-__pycache__/
+**pycache**/
 *.pyc
-chromadb/
+chroma_db/
+memory/
 logs/
-.cache/
+artifacts/
+tmp/

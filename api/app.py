@@ -105,31 +105,63 @@ def _response(result: dict) -> dict:
 def root():
     return {"message": "Multi-Agent AI Travel Planner API", "version": "1.0.0"}
 
-@app.post("/generate-trip")
-def generate_trip(req: TripRequest):
+@app.get("/health")
+def health_check():
+    """Health check endpoint to verify API server status."""
+    return {"status": "healthy", "version": "1.0.0"}
+
+@app.post("/plan")
+def plan_trip(req: TripRequest):
+    """Generate a structured, validated, and optimized trip plan from a query."""
+    if not req.user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id cannot be empty")
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="query cannot be empty")
     try:
         result = travel_graph.invoke(_initial_state(req.user_id, req.query))
         return _response(result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
 
-@app.post("/refine-trip")
-def refine_trip(req: RefineRequest):
+@app.post("/generate-trip", deprecated=True)
+def generate_trip(req: TripRequest):
+    return plan_trip(req)
+
+@app.post("/refine")
+def refine_trip_endpoint(req: RefineRequest):
+    """Apply surgical refinements to an existing trip plan based on user feedback."""
+    if not req.user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id cannot be empty")
+    if not req.feedback.strip():
+        raise HTTPException(status_code=400, detail="feedback cannot be empty")
     try:
-        state = {**_initial_state(req.user_id, req.current_state.get("raw_query", "")), **req.current_state, "user_id": req.user_id, "user_feedback": req.feedback}
+        state = {
+            **_initial_state(req.user_id, req.current_state.get("raw_query", "")),
+            **req.current_state,
+            "user_id": req.user_id,
+            "user_feedback": req.feedback
+        }
         result = refinement_graph.invoke(state)
         return _response(result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
 
+@app.post("/refine-trip", deprecated=True)
+def refine_trip(req: RefineRequest):
+    return refine_trip_endpoint(req)
 
-@app.post("/finalize-trip")
-def finalize_trip(req: FinalizeRequest):
+@app.post("/finalize")
+def finalize_trip_endpoint(req: FinalizeRequest):
+    """Finalize a trip plan and save the extracted behavioral preferences to memory."""
+    if not req.user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id cannot be empty")
     try:
         state = req.final_state
+        preferences = dict(state.get("structured_query", {}))
+        preferences["raw_query"] = state.get("raw_query", "")
         stored = store_behavioral_memory(
             req.user_id,
-            state.get("structured_query", {}),
+            preferences,
             feedback=req.feedback or state.get("user_feedback"),
         )
         return {
@@ -146,9 +178,23 @@ def finalize_trip(req: FinalizeRequest):
             },
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Finalization failed: {str(e)}")
 
-@app.post("/get-user-memory")
+@app.post("/finalize-trip", deprecated=True)
+def finalize_trip(req: FinalizeRequest):
+    return finalize_trip_endpoint(req)
+
+@app.get("/memory/{user_id}")
+def get_user_memory_endpoint(user_id: str):
+    """Retrieve all stored behavioral memories for a given user."""
+    if not user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id cannot be empty")
+    try:
+        memories = get_all_user_memory(user_id)
+        return {"user_id": user_id, "memories": memories, "count": len(memories)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve memory: {str(e)}")
+
+@app.post("/get-user-memory", deprecated=True)
 def get_memory(req: MemoryRequest):
-    memories = get_all_user_memory(req.user_id)
-    return {"user_id": req.user_id, "memories": memories, "count": len(memories)}
+    return get_user_memory_endpoint(req.user_id)

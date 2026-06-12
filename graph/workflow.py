@@ -41,14 +41,20 @@ class TravelState(TypedDict):
     stored_memories: list[dict]
     status: str
 
+# ── Logger Import ────────────────────────────
+from agents.logger import monitor_agent, set_request_id
+
 # ── Node functions ───────────────────────────
 def node_parse_query(state: TravelState) -> TravelState:
-    structured = run_query_agent(state["raw_query"])
+    set_request_id(f"{state.get('user_id', 'anon')}_{state.get('destination', 'travel')[:4]}")
+    with monitor_agent("query_understanding_agent"):
+        structured = run_query_agent(state["raw_query"])
     return {**state, "structured_query": structured, "status": "query_parsed"}
 
 def node_isolate_destination(state: TravelState) -> TravelState:
-    destination = normalize_destination(state.get("structured_query", {}).get("destination", ""))
-    structured = {**state.get("structured_query", {}), "destination": destination}
+    with monitor_agent("destination_isolation_agent"):
+        destination = normalize_destination(state.get("structured_query", {}).get("destination", ""))
+        structured = {**state.get("structured_query", {}), "destination": destination}
     return {
         **state,
         "destination": destination,
@@ -58,7 +64,8 @@ def node_isolate_destination(state: TravelState) -> TravelState:
     }
 
 def node_retrieve_memory(state: TravelState) -> TravelState:
-    profile = retrieve_behavior_profile(state["user_id"], state.get("structured_query", {}))
+    with monitor_agent("memory_retrieval_agent"):
+        profile = retrieve_behavior_profile(state["user_id"], state.get("structured_query", {}))
     return {
         **state,
         "behavior_profile": profile,
@@ -67,8 +74,9 @@ def node_retrieve_memory(state: TravelState) -> TravelState:
     }
 
 def node_retrieve_destination_rag(state: TravelState) -> TravelState:
-    sq = state.get("structured_query", {})
-    place_entities = retrieve_place_entities(state.get("destination", sq.get("destination", "")), sq.get("interests", []), n=12)
+    with monitor_agent("destination_rag_agent"):
+        sq = state.get("structured_query", {})
+        place_entities = retrieve_place_entities(state.get("destination", sq.get("destination", "")), sq.get("interests", []), n=20)
     return {
         **state,
         "rag_documents": [],
@@ -79,13 +87,14 @@ def node_retrieve_destination_rag(state: TravelState) -> TravelState:
     }
 
 def node_plan_itinerary(state: TravelState) -> TravelState:
-    plan = run_planner_agent(
-        state["structured_query"],
-        state["user_id"],
-        behavior_profile=state.get("behavior_profile", {}),
-        allowed_places=state.get("allowed_place_entities", []),
-    )
-    itinerary_text = itinerary_to_text(plan)
+    with monitor_agent("planner_agent"):
+        plan = run_planner_agent(
+            state["structured_query"],
+            state["user_id"],
+            behavior_profile=state.get("behavior_profile", {}),
+            allowed_places=state.get("allowed_place_entities", []),
+        )
+        itinerary_text = itinerary_to_text(plan)
     return {
         **state,
         "itinerary_json": plan,
@@ -96,12 +105,14 @@ def node_plan_itinerary(state: TravelState) -> TravelState:
     }
 
 def node_validate_itinerary(state: TravelState) -> TravelState:
-    plan, report = validate_itinerary(
-        state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
-        state.get("structured_query", {}),
-        state.get("allowed_place_entities", []),
-    )
-    text = itinerary_to_text(plan)
+    with monitor_agent("validation_agent"):
+        sq = {**state.get("structured_query", {}), "_changed_days": state.get("changed_days", [])}
+        plan, report = validate_itinerary(
+            state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
+            sq,
+            state.get("allowed_place_entities", []),
+        )
+        text = itinerary_to_text(plan)
     return {
         **state,
         "itinerary_json": plan if not state.get("user_feedback") else state.get("itinerary_json", plan),
@@ -116,12 +127,13 @@ def node_validate_itinerary(state: TravelState) -> TravelState:
 def node_refine_itinerary(state: TravelState) -> TravelState:
     if not state.get("user_feedback"):
         return {**state, "status": "refinement_skipped"}
-    result = run_refinement_agent(
-        state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
-        state["user_feedback"],
-        state["structured_query"]
-    )
-    plan = result["updated_itinerary"]
+    with monitor_agent("refinement_agent"):
+        result = run_refinement_agent(
+            state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
+            state["user_feedback"],
+            state["structured_query"]
+        )
+        plan = result["updated_itinerary"]
     return {
         **state,
         "session_memory": {
@@ -136,32 +148,39 @@ def node_refine_itinerary(state: TravelState) -> TravelState:
     }
 
 def node_estimate_budget(state: TravelState) -> TravelState:
-    budget = run_budget_agent(state["structured_query"], state.get("refined_itinerary_json") or state.get("itinerary_json", {}))
+    with monitor_agent("budget_agent"):
+        budget = run_budget_agent(state["structured_query"], state.get("refined_itinerary_json") or state.get("itinerary_json", {}))
     return {**state, "budget": budget, "status": "budget_estimated"}
 
 def node_optimize_rewards(state: TravelState) -> TravelState:
-    rewards = run_rewards_agent(state["structured_query"], state.get("budget", {}))
+    with monitor_agent("rewards_agent"):
+        rewards = run_rewards_agent(state["structured_query"], state.get("budget", {}))
     return {**state, "rewards": rewards, "status": "rewards_optimized"}
 
 def node_store_memory(state: TravelState) -> TravelState:
-    stored = store_behavioral_memory(
-        state["user_id"],
-        state["structured_query"],
-        feedback=state.get("user_feedback"),
-    )
+    with monitor_agent("memory_store_agent"):
+        preferences = dict(state.get("structured_query", {}))
+        preferences["raw_query"] = state.get("raw_query", "")
+        stored = store_behavioral_memory(
+            state["user_id"],
+            preferences,
+            feedback=state.get("user_feedback"),
+        )
     return {**state, "stored_memories": stored, "status": "memory_stored"}
 
 def node_generate_summary(state: TravelState) -> TravelState:
-    clean_plan = clean_itinerary(
-        state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
-        state.get("destination") or state.get("structured_query", {}).get("destination", ""),
-    )
-    summary = run_summary_agent(
-        clean_plan,
-        state["structured_query"],
-        state.get("budget", {}),
-        state.get("rewards", "")
-    )
+    with monitor_agent("summary_agent"):
+        clean_plan = clean_itinerary(
+            state.get("refined_itinerary_json") or state.get("itinerary_json", {}),
+            state.get("destination") or state.get("structured_query", {}).get("destination", ""),
+        )
+        summary = run_summary_agent(
+            clean_plan,
+            state["structured_query"],
+            state.get("budget", {}),
+            state.get("rewards", ""),
+            behavior_profile=state.get("behavior_profile")
+        )
     return {
         **state,
         "refined_itinerary_json": clean_plan,
