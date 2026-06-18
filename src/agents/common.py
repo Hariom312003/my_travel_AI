@@ -90,7 +90,8 @@ def save_trip_state_to_file(user_id: str, state: dict):
     try:
         import json
         import os
-        scratch_dir = "/home/hariom/my_project/travel_ai/scratch"
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        scratch_dir = os.path.join(root_dir, "scratch")
         os.makedirs(scratch_dir, exist_ok=True)
         path = os.path.join(scratch_dir, f"trip_state_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
@@ -103,7 +104,8 @@ def load_trip_state_from_file(user_id: str) -> dict | None:
     try:
         import json
         import os
-        path = f"/home/hariom/my_project/travel_ai/scratch/trip_state_{user_id}.json"
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(root_dir, "scratch", f"trip_state_{user_id}.json")
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
