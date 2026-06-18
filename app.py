@@ -1415,3 +1415,13 @@ else:
                                     <div style='font-size:11px; color:#64748b;'>Waiting for execution...</div>
                                 </div>
                                 """, unsafe_allow_html=True)
+
+
+# Dynamic Auto-Rerun for Background Downstream Swarms
+if st.session_state.get("itinerary_generated") and st.session_state.get("trip_state"):
+    from agents.common import load_trip_state_from_file
+    latest = load_trip_state_from_file(st.session_state.trip_state["user_id"])
+    if latest and latest.get("status") != "completed":
+        st.toast("⏳ Refining budget, rewards, and guide details in background...")
+        time.sleep(2.5)
+        st.rerun()
