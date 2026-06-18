@@ -36,8 +36,8 @@ def invoke_json(system_prompt: str, user_prompt: str, fallback: Any, temperature
     try:
         text = invoke_text(system_prompt, user_prompt, temperature=temperature)
     except Exception as e:
-        # Propagate configuration errors immediately
-        if "No AI provider configured" in str(e) or "LLM unavailable" in str(e):
+        # Propagate configuration errors or when no fallback is configured
+        if "No AI provider configured" in str(e) or "LLM unavailable" in str(e) or fallback is None:
             raise e
         return fallback
         

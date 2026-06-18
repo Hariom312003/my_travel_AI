@@ -901,14 +901,22 @@ Return structured JSON exactly matching the requested schema.
     try:
         from monitoring.logger import logger
         res = invoke_json(SYSTEM_PROMPT, prompt, fallback=None, temperature=0.2)
+        if not res:
+            raise Exception("Empty response received from LLM")
         if isinstance(res, dict) and (any(k.startswith("day_") for k in res.keys()) or "days" in res):
             itinerary = map_llm_to_standard_itinerary(res, destination, allowed_places)
             logger.info(f"[Planner Agent] Destination returned: {destination}")
             logger.info("[Planner Agent] Leaving agent")
             return itinerary
-        logger.warning("LLM returned invalid JSON or empty response. Falling back to rule-based scheduler.")
+        raise Exception("LLM returned invalid JSON schema structure")
     except Exception as e:
         from monitoring.logger import logger
+        from agents.constants import valid_destinations
+        # Raise error directly if destination is unknown to prevent fake templates
+        if destination not in valid_destinations():
+            logger.error(f"[Planner Agent] LLM generation failed for unknown destination '{destination}': {e}. Raising exception.")
+            raise Exception(f"Failed to plan itinerary for '{destination}' due to AI service rate limits. Please try again. Details: {e}")
+            
         if "No AI provider configured" in str(e) or "LLM unavailable" in str(e):
             raise e
         logger.error(f"Planner LLM generation failed: {e}. Falling back to rule-based scheduler.")
