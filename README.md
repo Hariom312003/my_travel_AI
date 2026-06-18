@@ -165,6 +165,40 @@ API docs are available at `http://localhost:8000/docs`.
 
 ---
 
+## 🎮 Interactive Walkthrough & How to Use
+
+Once the dashboard boots up (at `http://localhost:8501` or via the live link), follow this flow to get the most out of your multi-agent planner:
+
+### 1. Configure Your Input Profile
+* **User Identity:** Enter a unique **User ID** (e.g. `your_name`) in the sidebar. This isolates your personalization profile.
+* **Select Your Payment Cards:** Check the credit cards you own (e.g. SBI Elite, HDFC Millennia). The **Rewards Agent** will use this list to optimize cashback recommendations for your itinerary's high-ticket items.
+* **Set Your Budget & Duration:** Define your target budget and trip length.
+
+### 2. Enter a Natural Language Query
+Type a trip request in the text input area. For example:
+> *"Plan a 3-day trip to Goa. I want to visit local beaches and sample Goan seafood."*
+Click **Generate Itinerary** to trigger the LangGraph swarm. 
+
+### 3. Track Swarm Logs & Reasoning Traces
+* While the system plans, watch the live **LLM Reasoning Traces & Latency Audit** panel at the bottom of the page.
+* You can inspect the actual latency, prompt length, and AI models utilized by each individual agent (Query, RAG, Memory, Validator, Budget, Rewards, etc.) in real time.
+
+### 4. Navigate Your Completed Trip Plan
+Once the swarm completes, use the sidebar tabs to navigate the segmented modules:
+* **🏠 Product Home & Sandbox**: Input and state log area.
+* **📅 Itinerary Details**: High-contrast, clean narrative schedule of your mornings, afternoons, and evenings.
+* **💰 Cost breakdown**: Visualized budget estimations for hotel, transit, activities, and dining.
+* **💳 Card Rewards Optimizer**: Customized instructions detailing which credit cards to swipe at which categories to maximize savings.
+* **📖 Narrative summary**: A comprehensive, publication-ready travel guide including safety advisories and packing lists.
+
+### 5. Day-Locked Surgical Refinements
+Want to make changes to your plan?
+* Use the **Interactive Refinement Chat** input.
+* Write natural commands like: *"Swap afternoon activities on Day 2 to include a boat ride"*.
+* The **Refinement Agent** will surgically update only the requested slots while **keeping the other days strictly locked and untouched** (avoiding plan corruption).
+
+---
+
 ## 💡 Example Queries
 
 Try these queries inside the planner:
