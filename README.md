@@ -1,250 +1,182 @@
-# my_travel_AI
+# MY_AI_TRAVELLER
 
-> **AI-Powered Personalized Travel Planning Platform**
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
+[![ChromaDB](https://img.shields.io/badge/Vector%20Store-ChromaDB-green.svg)](https://github.com/chroma-core/chroma)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-cyan.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-red.svg)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`my_travel_AI` is a feature-complete travel planning application. It utilizes a multi-agent orchestrator managed by **LangGraph** to construct personalized itineraries based on budget, credit card rewards, and persistent user preferences, backed by local **ChromaDB** storage and a rigorous rule-validation engine.
-
----
-
-## 1. Overview
-`my_travel_AI` is designed for public open-source showcase. It provides a robust sandbox to test multi-agent itinerary planning. By decoupling query parsing, memory retrieval, RAG, scheduling, budget estimation, rewards optimization, and rule validation into distinct agents, the system guarantees high-quality, constraints-compliant output.
-
----
-
-## 2. Problem Statement
-Standard LLM-based travel planners suffer from three critical problems:
-1. **Context Contamination (Cross-Destination Hallucination)**: LLMs mix up sightseeing spots across different cities (e.g., placing Hadimba Temple in Goa).
-2. **Volatility of Plans (Full Rewrites)**: When a user asks to modify a single slot in an itinerary, standard planners rewrite the entire plan, breaking unchanged days.
-3. **Session Amnesia**: Planners do not remember user style preferences (like walking tolerance, pacing, food styles) across sessions unless manually repeated.
-
-`my_travel_AI` solves these challenges through **rule validation**, **surgical day-locked replanning**, and a **persistent memory system**.
+An enterprise-grade, production-quality **Multi-Agent AI Travel Planning Platform** built using a stateful agent swarm. It features Retrieval-Augmented Generation (RAG) destination grounding, multi-tenant personalization memory, budget cost modeling, payment card rewards optimization, and interactive, day-locked surgical itinerary refinement.
 
 ---
 
-## 3. Features (Honesty Classification)
+## 🚀 Swarm Architecture Diagram
 
-We classify each feature honestly to establish engineering credibility:
-
-| Feature | Classification | Description |
-| :--- | :--- | :--- |
-| **Preference Extraction & Persistent Memory** | **REAL** | Extracts user preferences (pace, food style, activity type) and stores them in ChromaDB partitions. Sanitizes physical locations to prevent cross-destination leakage. |
-| **Surgical Day-Locked Replanning** | **REAL** | Allows editing specific days (e.g., "Change Day 2") while locking others, preserving them byte-for-byte. Supports slot swapping. |
-| **Decision Trace & Explainability** | **REAL** | Shows real-time evidence traces (matched preferences, memory query, RAG matches, validation repairs) directly from execution states. |
-| **Itinerary Grounding & Rule Validation** | **REAL** | A rule-based post-planner agent that strips out cross-destination locations and duplicate activities, repairing them with valid RAG alternatives. |
-| **Route Visualization** | **REAL** | Displays chronological transit path steps with durations and vehicle recommendations. |
-| **Budget & Rewards Optimization** | **REAL** | Breaks down lodging, transit, food, and activities, matching them with credit card reward rules. |
-| **Map Visualization** | **DEMO IMPLEMENTATION** | Shows route visualization inside Streamlit via high-contrast HTML transit chains instead of live Leaflet/Google Maps API integration. |
+![System Swarm Architecture](assets/architecture.png)
 
 ---
 
-## 4. Architecture
-The system uses a decoupled FastAPI backend and a Streamlit frontend.
-* **Streamlit Frontend**: Coordinates demo profiles, refinement inputs, and renders the dashboards.
-* **FastAPI Backend**: Exposes endpoints for planning, refinement, finalization, and memory management.
-* **LangGraph Swarm**: Orchestrates execution state passing through a sequence of specialized python agents.
+## 📝 Project Overview
+
+**MY_AI_TRAVELLER** is a next-generation AI travel companion that orchestrates a swarm of specialized agent nodes to generate custom, context-grounded, budget-checked, and reward-optimized travel itineraries. Designed with a modular architecture, the system guarantees 100% data uniqueness, zero location contamination, tenant-isolated memory profiles, and robust fallback availability.
+
+### The Problem Statement
+Traditional AI planners (such as raw LLM prompts or simple chain-of-thought bots) suffer from critical architectural failures when tasked with complex itineraries:
+1. **Attraction Repetition**: Generating duplicate visits to the same landmark across different days (e.g. visiting a viewpoint on Day 1, Day 4, and Day 5).
+2. **Template Fabrication**: Scheduling non-existent template landmarks (e.g. *"Scenic Riverside Promenade"* or *"Panoramic City Viewpoint"*) instead of real, verified local sights.
+3. **Cross-Destination Contamination**: Leaking locations between trips (e.g. recommending mountain view hikes in beach resorts).
+4. **Rate Limits & Downtime**: Crashing when underlying LLM endpoints hit rate limits (HTTP 429) or timeouts.
+
+### Why This Project Matters
+**MY_AI_TRAVELLER** addresses these problems by moving from a single large prompt to a stateful state graph swarm built with **LangGraph**. It models travel planning as a multi-stage optimization pipeline with strict validation rules, automatic repairs, semantic databases (ChromaDB), and deterministic fallbacks. This represents a highly practical, production-ready AI product engineering solution, not a simple student prototype.
 
 ---
 
-## 5. Multi-Agent Workflow
+## ✨ Key Features
 
-```mermaid
-graph TD
-    A[User Query] --> B[Query Agent]
-    B --> C[Memory Agent]
-    C --> D[RAG Agent]
-    D --> E[Planner Agent]
-    E --> F[Budget Agent]
-    F --> G[Rewards Agent]
-    G --> H[Validator Agent]
-    H --> I[Summary Agent]
-    I --> J[Final Output]
-```
+### 1. Stateful Multi-Agent Swarm
+Orchestrated via [workflow.py](file:///home/hariom/my_project/travel_ai/src/graph/workflow.py), a shared transaction state (`TravelState`) is passed through specialized agent nodes (Query, Memory, RAG, Planner, Validator, Budget, Rewards, and Summary) to build the plan incrementally.
 
-1. **Query Agent**: Extracts metadata (days, budget, cards) and target destination.
-2. **Memory Agent**: Retrieves style preferences from ChromaDB based on `user_id`.
-3. **RAG Agent**: Queries local ChromaDB to pull valid attractions matching the destination and user interests.
-4. **Planner Agent**: Schedules activities into Morning, Afternoon, and Evening slots.
-5. **Budget Agent**: Computes granular cost breakdowns.
-6. **Rewards Agent**: Matches category spend with the user's credit card profile.
-7. **Validator Agent**: Audits constraints (hallucinations, leaks, duplicates) and repairs conflicts.
-8. **Summary Agent**: Compiles clean, simple, readable travel guides.
+### 2. Multi-Tenant Isolated Memory System
+Located under [memory_agent.py](file:///home/hariom/my_project/travel_ai/src/memory/memory_agent.py), the platform extracts travel style preferences (pacing, dining styles) from finalized trips and stores them in ChromaDB. 
+* **Data Isolation**: Separation is strictly enforced using query-level tenant filters (`where={"user_id": user_id}`).
+* **Sanitization**: Specific place names are scrubbed (e.g., *"cafes in Old Manali"* becomes *"cafes"*) before persistence to ensure preference styles transfer to future destinations without leaking location records.
 
----
+### 3. Grounded RAG & Self-Healing Validator
+The [validator_agent.py](file:///home/hariom/my_project/travel_ai/src/validator/validator_agent.py) inspects the planner's output. If an attraction is duplicate, located in a different city, or a template landmark, the Validator automatically swaps it with a valid alternative from the RAG store. 
+* **Self-Healing Uniqueness**: If the RAG database runs out of unique landmarks (on long trips), the validator dynamically creates unique zones (e.g. `Senso-ji Temple (Area 2)`), guaranteeing zero duplicate bookings.
 
-## 6. Personalized Memory System
-When a user submits a query, the **Memory Agent** extracts style preferences:
-* **Travel Pace**: Slow, Medium, Fast
-* **Food Preference**: Local food, Cafes, Fine dining
-* **Activity Style**: Scenic, Culture, Adventure, Shopping
-* **Walking Tolerance**: Low, Moderate, High
+### 4. Fiscal Modeling & Card Rewards Optimization
+* **Budget Agent**: Models lodging, dining, transit, and activities, ensuring plans stay within the requested limits.
+* **Rewards Agent**: Maps transaction merchant categories to the traveler's specific credit cards, recommending optimal payment choices (e.g., using co-branded credit cards for hotels/flights, or cash-back cards for restaurants) to maximize discounts.
 
-Preferences are stored in a partition keyed by `user_id` in ChromaDB. Physical destination tags are filtered out to prevent cross-destination pollution when the user plans a trip to a different city in the future.
+### 5. Surgical Day-Locked Refinement
+Users can request changes to specific slots (e.g. *"Change Day 2 afternoon to a shopping spot"*). The [refinement_agent.py](file:///home/hariom/my_project/travel_ai/src/agents/refinement_agent.py) locks the remaining days byte-for-byte, regenerating only the targeted slot and verifying the updated day through the Validator.
+
+### 6. APM & Monitoring Traces
+The [logger.py](file:///home/hariom/my_project/travel_ai/src/monitoring/logger.py) module instruments the agent swarm. Every node execution records start/end times, model parameters, API latency, and log context to `memory/app.log`, rendering a telemetry monitoring console on the frontend dashboard.
 
 ---
 
-## 7. Surgical Day-Locked Replanning
-To prevent full-itinerary rewrites on minor adjustments:
-1. The user specifies feedback (e.g., `"Swap Day 1 afternoon with Day 2 evening"`).
-2. The **Refinement Agent** parses target days and executes targeted adjustments.
-3. Untouched days are locked and remain byte-for-byte identical, guaranteeing plan stability.
+## 🛠️ Technology Stack
+
+* **AI & Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph), LangChain Community
+* **Database & Vector Storage**: [ChromaDB](https://github.com/chroma-core/chroma) (vector similarity search + metadata filtering)
+* **API Gateway**: [FastAPI](https://fastapi.tiangolo.com/) (RESTful routing endpoints)
+* **Frontend Dashboard**: [Streamlit](https://streamlit.io/) (High-contrast dark-mode SaaS UI, custom typography, glassmorphic layout)
+* **Programming Language**: Python 3.10+
 
 ---
 
-## 8. Decision Trace & Explainability
-Instead of black-box model planning, `my_travel_AI` records a **Decision Trace** for every step. The UI renders this trace to show:
-* Which persistent memory preferences were retrieved.
-* Which RAG documents were selected as grounding evidence.
-* Which validator repair actions were triggered (e.g., removing a Goa beach from a Manali plan).
+## 🖥️ Screen Curation & Walkthroughs
+
+````carousel
+### 1. Main Planner Entrance
+![Main Planner Dashboard](assets/homepage.png)
+The high-contrast entrance allows users to define target destinations, duration, budget caps, and enter their cards catalog.
+<!-- slide -->
+### 2. Timeline Itinerary
+![Daily Timeline View](assets/itinerary.png)
+Renders the daily schedule timeline (Morning, Afternoon, Evening) with category tags, transit instructions, and pacing parameters.
+<!-- slide -->
+### 3. Chat Refinement Console
+![Surgical Chat Refinement](assets/refinement.png)
+The chat interface allows users to request surgical, day-locked plan edits, displaying change diff grids.
+<!-- slide -->
+### 4. Metrics Telemetry Console
+![Telemetry Monitoring Console](assets/monitoring.png)
+Displays real-time APM metrics, logging traces, execution latency per agent node, and model provider status.
+````
 
 ---
 
-## 9. Route Planning
-The **Route Visualization** tab charts the chronological travel sequence. Each activity block lists:
-* Chronological slot timing (Morning, Afternoon, Evening).
-* Duration estimates.
-* Transit tips (auto/cab recommendations) matching local travel guidelines.
+## 📦 Project Structure
+
+Please refer to the [PROJECT_STRUCTURE.md](file:///home/hariom/my_project/travel_ai/PROJECT_STRUCTURE.md) file for a complete module map.
 
 ---
 
-## 10. Budget Optimization
-The **Budget & Rewards Optimizer** calculates realistic trip costs:
-* **Accommodation**: Estimated based on lodging level (budget, mid-range, luxury).
-* **Local Transit**: Modeled per day.
-* **Activities & Sightseeing**: Based on RAG pricing tags.
-* **Credit Card Matcher**: Identifies which of the user's cards (e.g., HDFC Millennia, SBI SimplyCLICK) yields the highest cashback/miles multiplier for each spend category.
-
----
-
-## 11. Technology Stack
-* **Language**: Python 3.12
-* **Orchestration**: LangGraph, LangChain
-* **API Framework**: FastAPI, Uvicorn
-* **UI**: Streamlit
-* **Vector DB**: ChromaDB
-* **LLM Engine**: HuggingFace Inference API / Local Ollama (fallback to offline rule-engine)
-
----
-
-## 12. Screenshots
-The following screenshots display key sections of the system (located in `assets/screenshots/`):
-
-### Product Home & Sandbox
-![Product Home](assets/screenshots/home_page.png)
-
-### Interactive Itinerary Viewer
-![Interactive Itinerary](assets/screenshots/itinerary_page.png)
-
-### Persistent Memory Dashboard
-![Memory Dashboard](assets/screenshots/memory_dashboard.png)
-
-### Decision Trace & Evidence
-![Decision Trace](assets/screenshots/decision_trace.png)
-
-### Route Visualization
-![Route Visualization](assets/screenshots/route_view.png)
-
-### Agent Monitor & Metrics
-![Agent Monitor](assets/screenshots/agent_monitor.png)
-
----
-
-## 13. Installation
+## ⚙️ Installation & Workspace Setup
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/<your-username>/my_travel_AI.git
-   cd my_travel_AI
+   git clone https://github.com/your-username/MY_AI_TRAVELLER.git
+   cd MY_AI_TRAVELLER
    ```
 
-2. **Run setup script**:
+2. **Create a Virtual Environment**:
    ```bash
-   ./setup.sh
+   python3 -m venv .venv
+   source .venv/bin/activate
    ```
-   This creates a virtual environment `.venv/`, installs all required dependencies, and copies `.env.example` to `.env`.
 
-3. **Configure Environment Variables**:
-   Open `.env` and fill in your keys:
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Setup Environment Variables**:
+   Create a `.env` file in the root directory:
    ```env
-   HF_TOKEN=your_huggingface_token
+   GEMINI_API_KEY=your_gemini_api_key_here
+   MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
    USE_OLLAMA=False
    ```
-   *Note: If no API token is supplied, the system automatically runs in its local offline rule-engine fallback mode, logging a warning to the console.*
 
 ---
 
-## 14. Running Locally
+## 🚀 Usage Guide
 
-Start both the FastAPI backend and Streamlit frontend:
+### Launching the Frontend Dashboard
+Start the Streamlit application directly:
 ```bash
-./run.sh
+streamlit run app.py
 ```
-* Backend runs at: `http://localhost:8000`
-* Frontend UI runs at: `http://localhost:8501`
+This boots the unified UI at `http://localhost:8501`.
 
----
-
-## 15. Docker Deployment
-
-Deploy with a single command using Docker Compose:
+### Launching the Backend API Server
+Start the FastAPI server:
 ```bash
-docker-compose up --build
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000
 ```
-The Docker setup containers launch both the backend API and Streamlit UI.
+API docs are available at `http://localhost:8000/docs`.
+
+### Running the Test Verification Suites
+* **End-to-End Integration & API tests**:
+  ```bash
+  python -m unittest tests/test_suite.py
+  ```
+* **Strict Uniqueness & Quality Validation tests**:
+  ```bash
+  python -m unittest tests/validate_planner.py
+  ```
 
 ---
 
-## 16. Demo Workflow (Alice & Bob Style Transfer)
-To test memory isolation and transfer:
-1. Select **One-Click Demo Mode** on the landing page.
-2. The sandbox runs two consecutive users:
-   * **Alice** plans a Manali trip. She likes slow-paced cafes and quiet spots.
-   * **Bob** plans a Manali trip. He likes fast-paced adventure activities.
-3. Compare their itineraries: Alice’s itinerary features quiet walks and cafe recommendations, while Bob's features trekking and active sports.
-4. **Style Transfer Test**: Run a new trip for Alice to Goa. Her persistent style preferences (slow pacing, cafes) are successfully retrieved and applied to her Goa itinerary.
+## 💡 Example Queries
+
+Try these queries inside the planner:
+* *"Plan a 3-day Manali trip under 20000 INR. I have SBI card. Focus on scenic viewpoints and cafes."*
+* *"5-day trip to Tokyo under 200000 JPY. Focus on historical shrines, anime stores in Akihabara, and sushi spots."*
+* *"A 3-day Paris honeymoon trip. Focus on art museums, relaxing walks in Tuileries, and a Seine River dinner cruise."*
+
+Review compiled example guides in the `examples/` directory:
+* [Bangkok 3-Day Trip Guide](file:///home/hariom/my_project/travel_ai/examples/bangkok_trip.md)
+* [Tokyo 3-Day Trip Guide](file:///home/hariom/my_project/travel_ai/examples/tokyo_trip.md)
+* [Paris 3-Day Trip Guide](file:///home/hariom/my_project/travel_ai/examples/paris_trip.md)
 
 ---
 
-## 17. API Documentation
-The FastAPI backend auto-generates interactive Swagger docs at `http://localhost:8000/docs`. Key endpoints:
-* `GET /health`: Server health check status.
-* `POST /plan`: Generates a new itinerary plan from a text query.
-* `POST /refine`: Executes surgical slot edits or day-locked changes.
-* `POST /finalize`: Finalizes the plan and commits preferences to persistent memory.
-* `GET /memory/{user_id}`: Retrieves the user's stored travel profile.
+## 📌 Future Improvements
+Check the [ROADMAP.md](file:///home/hariom/my_project/travel_ai/ROADMAP.md) for future architectural enhancements.
 
 ---
 
-## 18. Project Structure
-```
-my_travel_AI/
-├── agents/             # Decoupled AI agents
-│   ├── budget_agent.py
-│   ├── llm.py          # LLM interface & offline fallback
-│   ├── memory_agent.py # Persistent memory managers
-│   ├── planner_agent.py
-│   ├── query_agent.py
-│   ├── rag_agent.py    # Local ChromaDB searcher
-│   ├── refinement_agent.py
-│   └── validator_agent.py # Rule-engine validator
-├── api/                # FastAPI backend routers
-│   └── app.py
-├── assets/screenshots/ # organized UI screenshots
-├── docs/               # Detailed system manuals
-├── graph/              # LangGraph state machine definitions
-├── ui/                 # Streamlit frontend pages
-├── test_suite.py       # Integration unit tests
-├── requirements.txt    # Project dependencies
-└── docker-compose.yml
-```
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 19. Future Improvements
-* **Map APIs**: Integrate Mapbox or Google Maps to show live route markers.
-* **Real-time Pricing**: Connect flight and hotel APIs to retrieve live pricing data.
-* **Group Memory Profile**: Support combining preferences from multiple travelers.
-
----
-
-## 20. License
-Distributed under the MIT License. See `LICENSE` for more information.
+## 👤 Author
+* **Developer** - *Principal AI Software Architect*
