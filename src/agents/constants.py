@@ -18,6 +18,7 @@ DESTINATION_ALIASES = {
     "goa": "Goa",
     "jaipur": "Jaipur",
     "kullu": "Kullu",
+    "varanasi": "Varanasi",
 }
 
 

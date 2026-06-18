@@ -336,6 +336,17 @@ DEMO_ATTRACTIONS = {
         "Bagore Ki Haveli museum",
         "Fateh Sagar Lake promenade"
     ],
+    "Varanasi": [
+        "Kashi Vishwanath Temple",
+        "Dashashwamedh Ghat & Ganga Aarti",
+        "Assi Ghat & Sunrise",
+        "Sarnath Buddhist Site",
+        "Manikarnika Ghat Heritage",
+        "Banaras Hindu University & Birla Temple",
+        "Ramnagar Fort",
+        "Sankat Mochan Hanuman Temple",
+        "Tulsi Manas Mandir"
+    ],
     "Rishikesh": [
         "Laxman Jhula & Ram Jhula",
         "Triveni Ghat Ganga Aarti",
@@ -517,6 +528,11 @@ DEMO_FOOD = {
         "Breakfast": "Poha Jalebi with hot milk tea from street vendors",
         "Lunch": "Mewari style dal baati churma thali in ghee",
         "Dinner": "Laal maas lamb curry with tandoori roti overlooking the lake"
+    },
+    "Varanasi": {
+        "Breakfast": "Hot Kachori Sabzi followed by sweet crispy Jalebi at Ram Bhandar",
+        "Lunch": "Traditional Banarasi Baati Chokha or regional thali served with ghee",
+        "Dinner": "Spicy Tamatar Chaat and Golgappas at Deena Chaat Bhandar, finished with a sweet Banarasi Paan"
     },
     "Rishikesh": {
         "Breakfast": "Aloo poori with sweet lassi at a riverside joint",
