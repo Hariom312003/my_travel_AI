@@ -31,6 +31,12 @@ def get_available_providers() -> list[tuple[str, str]]:
 
     providers = []
 
+    # 0. Ollama (if enabled)
+    use_ollama = os.getenv("USE_OLLAMA", "False").lower() in ("true", "1", "yes")
+    if use_ollama:
+        model_name = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
+        providers.append(("Ollama", model_name))
+
     # 1. Gemini
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
     if gemini_key and gemini_key.strip():
@@ -94,6 +100,8 @@ def generate(prompt: str, system_prompt: Optional[str] = None, temperature: floa
         try:
             if provider == "Mock":
                 result = mock_generate(prompt, system_prompt, temperature)
+            elif provider == "Ollama":
+                result = generate_ollama(model, prompt, system_prompt, temperature)
             elif provider == "Claude":
                 result = generate_claude(prompt, system_prompt, temperature)
             elif provider == "GPT":
@@ -132,18 +140,34 @@ def generate(prompt: str, system_prompt: Optional[str] = None, temperature: floa
 
     raise Exception(f"All LLM providers failed. Last error: {str(last_error)}")
 
-def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 25, max_retries: int = 1) -> requests.Response:
+def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 25, max_retries: int = 5) -> requests.Response:
     import time
+    import re
     delay = 1.0
     for attempt in range(max_retries):
         try:
             response = requests.post(url, json=json_data, headers=headers, timeout=timeout)
             if response.status_code in (429, 500, 502, 503, 504):
+                sleep_time = delay
+                if response.status_code == 429:
+                    try:
+                        err_json = response.json()
+                        details = err_json.get("error", {}).get("details", [])
+                        for detail in details:
+                            if detail.get("@type") == "type.googleapis.com/google.rpc.RetryInfo":
+                                retry_delay_str = detail.get("retryDelay", "")
+                                match = re.match(r"([\d\.]+)\s*s", retry_delay_str)
+                                if match:
+                                    sleep_time = float(match.group(1)) + 0.5
+                                    break
+                    except Exception:
+                        pass
+                
                 if attempt == max_retries - 1:
                     raise Exception(f"HTTP {response.status_code}: {response.text}")
-                logger.warning(f"HTTP {response.status_code} on attempt {attempt+1} for {url}. Retrying in {delay}s...")
-                time.sleep(delay)
-                delay *= 2
+                logger.warning(f"HTTP {response.status_code} on attempt {attempt+1} for {url}. Retrying in {sleep_time:.2f}s...")
+                time.sleep(sleep_time)
+                delay = max(delay * 2, sleep_time)
                 continue
             return response
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
@@ -408,3 +432,35 @@ def mock_generate(prompt: str, system_prompt: Optional[str], temperature: float)
         return json.dumps(ref)
 
     return f"This is a mock fallback response for: {prompt[:100]}..."
+
+
+def generate_ollama(model: str, prompt: str, system_prompt: Optional[str], temperature: float) -> str:
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    url = f"{ollama_url}/api/chat"
+    headers = {"content-type": "application/json"}
+    
+    ollama_model = model
+    if "/" in model:
+        ollama_model = model.split("/")[-1].lower()
+        if "qwen2.5-7b" in ollama_model:
+            ollama_model = "qwen2.5:7b"
+        elif "qwen2.5" in ollama_model:
+            ollama_model = "qwen2.5"
+            
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    
+    payload = {
+        "model": ollama_model,
+        "messages": messages,
+        "options": {"temperature": temperature},
+        "stream": False
+    }
+    
+    response = robust_post(url, payload, headers)
+    if response.status_code == 200:
+        return response.json()["message"]["content"].strip()
+    else:
+        raise Exception(f"Ollama API failed: {response.text}")

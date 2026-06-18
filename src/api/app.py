@@ -11,6 +11,9 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from graph.workflow import travel_graph, refinement_graph, TravelState
