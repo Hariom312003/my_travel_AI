@@ -173,10 +173,5 @@ Check the [ROADMAP.md](file:///home/hariom/my_project/travel_ai/ROADMAP.md) for 
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
 
-## 👤 Author
-* **Developer** - *Principal AI Software Architect*
