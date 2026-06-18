@@ -19,6 +19,9 @@ DESTINATION_ALIASES = {
     "jaipur": "Jaipur",
     "kullu": "Kullu",
     "varanasi": "Varanasi",
+    "ayodhya": "Ayodhya",
+    "gorakhpur": "Gorakhpur",
+    "mirzapur": "Mirzapur",
 }
 
 

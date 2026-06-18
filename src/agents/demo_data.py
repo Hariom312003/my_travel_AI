@@ -347,6 +347,39 @@ DEMO_ATTRACTIONS = {
         "Sankat Mochan Hanuman Temple",
         "Tulsi Manas Mandir"
     ],
+    "Ayodhya": [
+        "Ram Janmabhoomi Mandir",
+        "Hanuman Garhi Temple",
+        "Kanak Bhawan",
+        "Saryu River Ghats & Aarti",
+        "Nageshwarnath Temple",
+        "Treta Ke Thakur",
+        "Guptar Ghat Walk",
+        "Mani Parvat",
+        "Gulab Bari heritage garden"
+    ],
+    "Gorakhpur": [
+        "Gorakhnath Temple",
+        "Gita Press",
+        "Ramgarh Taal Lake & Marine Drive",
+        "Gorakhpur Railway Museum",
+        "Kushmi Forest nature walk",
+        "Arogya Mandir",
+        "Vindhyavasini Park",
+        "Imambara heritage site",
+        "Neer Nikunj Park"
+    ],
+    "Mirzapur": [
+        "Vindhyachal Dham & Vindhyavasini Temple",
+        "Ashtabhuja Temple",
+        "Kali Khoh Temple",
+        "Chunar Fort",
+        "Wyndham Falls",
+        "Lakhaniya Dari Waterfalls",
+        "Sirsi Dam & Scenic Falls",
+        "Ghanta Ghar Mirzapur",
+        "Mirzapur Ganga River Ghats"
+    ],
     "Rishikesh": [
         "Laxman Jhula & Ram Jhula",
         "Triveni Ghat Ganga Aarti",
@@ -533,6 +566,21 @@ DEMO_FOOD = {
         "Breakfast": "Hot Kachori Sabzi followed by sweet crispy Jalebi at Ram Bhandar",
         "Lunch": "Traditional Banarasi Baati Chokha or regional thali served with ghee",
         "Dinner": "Spicy Tamatar Chaat and Golgappas at Deena Chaat Bhandar, finished with a sweet Banarasi Paan"
+    },
+    "Ayodhya": {
+        "Breakfast": "Hot Bedmi Poori and Jalebi with Rabri from local sweet stalls",
+        "Lunch": "Traditional Satvik thali cooked in pure ghee near Ram Janmabhoomi",
+        "Dinner": "Local street foods like aloo tikki and sweet Ayodhya pedas"
+    },
+    "Gorakhpur": {
+        "Breakfast": "Fluffy Poori Sabzi and sweet Lassi near Gorakhnath Temple",
+        "Lunch": "Purvanchal style thali with dal, rice, and chokha at a local dhaba",
+        "Dinner": "Local kebabs and biryani from historic city markets"
+    },
+    "Mirzapur": {
+        "Breakfast": "Local kachori and hot tea in kulhad near Vindhyachal",
+        "Lunch": "Traditional Purvanchali dal baati and spicy chutney",
+        "Dinner": "Regional vegetable curry with roti and sweet Mirzapur pedas"
     },
     "Rishikesh": {
         "Breakfast": "Aloo poori with sweet lassi at a riverside joint",
