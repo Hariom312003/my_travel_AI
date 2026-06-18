@@ -62,6 +62,13 @@ The [logger.py](file:///home/hariom/my_project/travel_ai/src/monitoring/logger.p
 ## 🛠️ Technology Stack
 
 * **AI & Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph), LangChain Community
+* **Supported LLMs & Failover**: Priority-based failover routing:
+  1. **Google Gemini** (`gemini-2.5-flash`) via `GEMINI_API_KEY` (Primary Production model)
+  2. **Groq** (`llama-3.3-70b-versatile`) via `GROQ_API_KEY`
+  3. **OpenRouter** (`meta-llama/llama-3.3-70b-instruct:free`) via `OPENROUTER_API_KEY`
+  4. **Anthropic Claude** (`claude-3-5-sonnet-20241022`) via `CLAUDE_API_KEY`
+  5. **OpenAI GPT** (`gpt-4o`) via `OPENAI_API_KEY`
+  6. **Mock LLM** (`mock-model`) for unit testing & local/offline failover
 * **Database & Vector Storage**: [ChromaDB](https://github.com/chroma-core/chroma) (vector similarity search + metadata filtering)
 * **API Gateway**: [FastAPI](https://fastapi.tiangolo.com/) (RESTful routing endpoints)
 * **Frontend Dashboard**: [Streamlit](https://streamlit.io/) (High-contrast dark-mode SaaS UI, custom typography, glassmorphic layout)
