@@ -29,9 +29,9 @@ mkdir -p rag_data
 # 5. Pre-ingest RAG data to local ChromaDB
 echo "Initializing and pre-ingesting RAG travel database..."
 python3 -c "
-import sys
-sys.path.insert(0, '.')
-from agents.rag_agent import ingest_travel_data
+import sys, os
+sys.path.insert(0, os.path.abspath('src'))
+from rag.rag_agent import ingest_travel_data
 try:
     ingest_travel_data()
     print('ChromaDB RAG Ingestion Complete!')
