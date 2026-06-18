@@ -5,10 +5,13 @@
 [![ChromaDB](https://img.shields.io/badge/Vector%20Store-ChromaDB-green.svg)](https://github.com/chroma-core/chroma)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-cyan.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-red.svg)](https://streamlit.io/)
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/hariom312003/my_travel_ai/main/app.py)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mytravelai-8ldd9q3yfo3k2vlldjg6y3.streamlit.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An enterprise-grade, production-quality **Multi-Agent AI Travel Planning Platform** built using a stateful agent swarm. It features Retrieval-Augmented Generation (RAG) destination grounding, multi-tenant personalization memory, budget cost modeling, payment card rewards optimization, and interactive, day-locked surgical itinerary refinement.
+
+> [!TIP]
+> **Try it live:** The application is deployed on Streamlit Community Cloud and can be accessed directly at: **[mytravelai-8ldd9q3yfo3k2vlldjg6y3.streamlit.app](https://mytravelai-8ldd9q3yfo3k2vlldjg6y3.streamlit.app/)**
 
 ---
 
