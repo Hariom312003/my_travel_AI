@@ -69,7 +69,10 @@ def node_parse_query(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     
     agent_metrics = dict(state.get("agent_metrics", {}))
@@ -193,7 +196,10 @@ def node_retrieve_destination_rag(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     
     agent_metrics = dict(state.get("agent_metrics", {}))
@@ -247,7 +253,10 @@ def node_plan_itinerary(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     
     agent_metrics = dict(state.get("agent_metrics", {}))
@@ -352,7 +361,10 @@ def node_refine_itinerary(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     agent_metrics = dict(state.get("agent_metrics", {}))
     agent_metrics["Refinement Agent"] = metrics
@@ -402,7 +414,10 @@ def node_estimate_budget(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     
     agent_metrics = dict(state.get("agent_metrics", {}))
@@ -441,7 +456,10 @@ def node_optimize_rewards(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     agent_metrics = dict(state.get("agent_metrics", {}))
     agent_metrics["Rewards Agent"] = metrics
@@ -500,7 +518,10 @@ def node_generate_summary(state: TravelState) -> TravelState:
         "provider": llm_info.get("provider", "Mock"),
         "model": llm_info.get("model", "mock-model"),
         "prompt_size": llm_info.get("prompt_size", 0),
-        "response_size": llm_info.get("response_size", 0)
+        "response_size": llm_info.get("response_size", 0),
+        "retries": llm_info.get("retries", 0),
+        "failover_count": llm_info.get("failover_count", 0),
+        "success_status": llm_info.get("success_status", "Success")
     }
     
     agent_metrics = dict(state.get("agent_metrics", {}))

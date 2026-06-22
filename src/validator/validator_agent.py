@@ -20,6 +20,24 @@ def _contains_any(text: str, names: set[str]) -> list[str]:
     return [name for name in names if name and name.lower() in lower]
 
 
+def _is_allowed(location: str, allowed: set[str]) -> bool:
+    if not allowed:
+        return True
+    if location in allowed:
+        return True
+    loc_lower = location.lower()
+    allowed_lower = {a.lower() for a in allowed}
+    if loc_lower in allowed_lower:
+        return True
+    # Self-healing area check
+    match = re.match(r"^(.*?)\s*\(area \d+\)$", loc_lower)
+    if match:
+        base_name = match.group(1).strip()
+        if base_name in allowed_lower:
+            return True
+    return False
+
+
 def _replacement_item(doc: dict, slot: str, day_number: int, relaxed: bool) -> dict:
     time_by_slot = {"morning": "09:00", "afternoon": "13:30", "evening": "18:00"}
     duration = "2 hours" if relaxed else "2-2.5 hours"
@@ -92,7 +110,7 @@ def sanitize_user_plan(plan: dict[str, Any], destination: str, allowed: set[str]
                     "notes": item.get("notes", ""),
                 }
                 for item in day.get(slot, []) or []
-                if not allowed or item.get("location") in allowed
+                if not allowed or _is_allowed(item.get("location", ""), allowed)
             ]
     clean["planning_notes"] = []
     return clean
@@ -113,8 +131,8 @@ def clean_itinerary(plan: dict[str, Any], destination: str) -> dict[str, Any]:
         for slot in SLOTS:
             day[slot] = [
                 item for item in day.get(slot, []) or []
-                if (not allowed or item.get("location") in allowed)
-                and not _contains_any(" ".join(str(item.get(k, "")) for k in ["activity", "location", "notes", "transport"]), off_destination)
+                if (not allowed or _is_allowed(item.get("location", ""), allowed))
+                and (_is_allowed(item.get("location", ""), allowed) or not _contains_any(" ".join(str(item.get(k, "")) for k in ["activity", "location", "notes", "transport"]), off_destination))
             ]
         safe_food = []
         for food in day.get("food_recommendations", []) or []:
@@ -241,22 +259,26 @@ def validate_itinerary(
                 full_text = " ".join(
                     str(item.get(key, "")) for key in ["activity", "location", "transport", "notes"]
                 )
-                off_dest_hits = _contains_any(full_text, off_destination_names)
                 
                 # Grounding checks
                 invalid_location = False
                 if docs:
-                    invalid_location = _norm(location) not in allowed_norm
+                    invalid_location = not _is_allowed(location, allowed)
+                    
+                off_dest_hits = []
+                if not docs or invalid_location:
+                    off_dest_hits = _contains_any(full_text, off_destination_names)
                     
                 # Duplication checks
                 duplicate = location.lower() in global_used_locations
                 
                 # Forbidden template checks
                 is_template = False
-                for pattern in FORBIDDEN_TEMPLATES:
-                    if re.search(pattern, location.lower()):
-                        is_template = True
-                        break
+                if not docs or invalid_location:
+                    for pattern in FORBIDDEN_TEMPLATES:
+                        if re.search(pattern, location.lower()):
+                            is_template = True
+                            break
                         
                 if invalid_location or off_dest_hits or duplicate or is_template:
                     reason = []

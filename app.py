@@ -1403,7 +1403,10 @@ else:
                                         <b>Provider:</b> {metric.get('provider', 'N/A')}<br>
                                         <b>Model:</b> {metric.get('model', 'N/A')}<br>
                                         <b>Prompt Length:</b> {metric.get('prompt_size', 0)} chars<br>
-                                        <b>Response Length:</b> {metric.get('response_size', 0)} chars
+                                        <b>Response Length:</b> {metric.get('response_size', 0)} chars<br>
+                                        <b>Retries:</b> {metric.get('retries', 0)}<br>
+                                        <b>Failovers:</b> {metric.get('failover_count', 0)}<br>
+                                        <b>Status:</b> {metric.get('success_status', 'Success')}
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)

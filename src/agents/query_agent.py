@@ -62,6 +62,9 @@ def _fallback_parse(user_query: str) -> dict:
         valid_parts = []
         for p in parts:
             p_lower = p.lower()
+            if p_lower == "of":
+                valid_parts.append(p)
+                continue
             if p_lower in stopwords:
                 break
             if p_lower.isdigit():
@@ -70,7 +73,13 @@ def _fallback_parse(user_query: str) -> dict:
                 continue
             valid_parts.append(p)
         if valid_parts:
-            return " ".join(valid_parts).title()
+            result_parts = []
+            for idx, vp in enumerate(valid_parts):
+                if vp.lower() == "of" and idx > 0 and idx < len(valid_parts) - 1:
+                    result_parts.append("of")
+                else:
+                    result_parts.append(vp.title())
+            return " ".join(result_parts)
         return ""
 
     # 1. Match specific travel destination preposition patterns (highest confidence)
@@ -100,13 +109,22 @@ def _fallback_parse(user_query: str) -> dict:
             dest_parts = []
             for w in reversed(candidate_words):
                 w_lower = w.lower()
+                if w_lower == "of":
+                    dest_parts.insert(0, w)
+                    continue
                 if w_lower in stopwords or w_lower.isdigit():
                     break
                 dest_parts.insert(0, w)
             if dest_parts:
-                validated = " ".join(dest_parts).title()
-                if validated:
-                    destination = validated
+                validated = " ".join(dest_parts)
+                # Capitalize nicely
+                result_parts = []
+                for idx, vp in enumerate(validated.split()):
+                    if vp.lower() == "of" and idx > 0 and idx < len(validated.split()) - 1:
+                        result_parts.append("of")
+                    else:
+                        result_parts.append(vp.title())
+                destination = " ".join(result_parts)
 
     # 3. Search in user query for any known destinations
     if not destination:
@@ -126,7 +144,7 @@ def _fallback_parse(user_query: str) -> dict:
     if not destination:
         destination = "Destination"
         
-    days_match = re.search(r"(\d+)\s*(?:day|days|d)\b", text)
+    days_match = re.search(r"(\d+)\s*-?\s*(?:day|days|d)\b", text)
     budget_match = re.search(r"(?:under|below|budget|within|for)?\s*(?:rs\.?|inr|₹)?\s*([0-9][0-9,]{3,})", text)
     cards = [card for card in CARDS if card.lower() in text]
     interests = [

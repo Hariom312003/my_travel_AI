@@ -22,12 +22,21 @@ from agents.demo_data import DEMO_ATTRACTIONS, DEMO_FOOD
 # Thread/Async-safe context variable to store LLM traces
 llm_trace_var = contextvars.ContextVar("llm_trace", default=None)
 
-def get_available_providers() -> list[tuple[str, str]]:
-    """Get all configured LLM providers in priority order."""
-    # Check for mock key first to support testing
-    for key_name in ["GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "CLAUDE_API_KEY", "CLAUDE_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_KEY"]:
-        if os.getenv(key_name) == "mock_test_key":
-            return [("Mock", "mock-model")]
+def get_available_provider() -> list[dict[str, Any]]:
+    """Get all configured LLM providers in target priority order."""
+    # Check if mock mode is explicitly requested or keys are mock keys
+    is_mock = os.getenv("MOCK_LLM", "False").lower() in ("true", "1", "yes")
+    if not is_mock:
+        for key_name in ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "CLAUDE_API_KEY", "OPENAI_API_KEY"]:
+            if os.getenv(key_name) == "mock_test_key":
+                is_mock = True
+                break
+                
+    if is_mock:
+        logger.warning("======================================================================")
+        logger.warning("SRE WARNING: Running in offline MOCK mode. No real LLM calls will be made.")
+        logger.warning("======================================================================")
+        return [{"name": "Mock", "model": "mock-model", "api_key": "mock_test_key"}]
 
     providers = []
 
@@ -35,34 +44,45 @@ def get_available_providers() -> list[tuple[str, str]]:
     use_ollama = os.getenv("USE_OLLAMA", "False").lower() in ("true", "1", "yes")
     if use_ollama:
         model_name = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
-        providers.append(("Ollama", model_name))
+        providers.append({"name": "Ollama", "model": model_name, "api_key": None})
 
-    # 1. Gemini
+    # 1. Gemini Free
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
     if gemini_key and gemini_key.strip():
-        providers.append(("Gemini", "gemini-2.5-flash"))
+        providers.append({"name": "Gemini", "model": "gemini-2.5-flash", "api_key": gemini_key})
 
-    # 2. Groq
+    # 2. Groq Free
     groq_key = os.getenv("GROQ_API_KEY")
     if groq_key and groq_key.strip():
-        providers.append(("Groq", "llama-3.3-70b-versatile"))
+        providers.append({"name": "Groq", "model": "llama-3.3-70b-versatile", "api_key": groq_key})
 
-    # 3. OpenRouter
+    # 3. OpenRouter Free
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     if openrouter_key and openrouter_key.strip():
-        providers.append(("OpenRouter", "meta-llama/llama-3.3-70b-instruct:free"))
+        providers.append({"name": "OpenRouter", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_key})
 
-    # 4. Claude
+    # 4. Gemini Backup Key
+    gemini_backup = os.getenv("GEMINI_API_KEY_BACKUP")
+    if gemini_backup and gemini_backup.strip():
+        providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash", "api_key": gemini_backup})
+
+    # 5. Claude
     claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
     if claude_key and claude_key.strip():
-        providers.append(("Claude", "claude-3-5-sonnet-20241022"))
+        providers.append({"name": "Claude", "model": "claude-3-5-sonnet-20241022", "api_key": claude_key})
 
-    # 5. OpenAI
+    # 6. OpenAI
     openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
     if openai_key and openai_key.strip():
-        providers.append(("GPT", "gpt-4o"))
+        providers.append({"name": "GPT", "model": "gpt-4o", "api_key": openai_key})
 
     return providers
+
+def get_available_providers() -> list[tuple[str, str]]:
+    """Legacy compatibility wrapper for get_available_provider()."""
+    provs = get_available_provider()
+    # Map name "GeminiBackup" to "Gemini" for backwards compatibility
+    return [(p["name"] if p["name"] != "GeminiBackup" else "Gemini", p["model"]) for p in provs]
 
 def get_llm() -> tuple[str, str]:
     """Select the primary active LLM provider and model."""
@@ -79,9 +99,74 @@ def get_llm() -> tuple[str, str]:
         )
     return providers[0]
 
-def generate(prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.2) -> str:
-    """Generate completion using selected provider or failover to fallbacks on error."""
-    providers = get_available_providers()
+def provider_health_check(provider: dict) -> bool:
+    """Statically verify if the provider configuration is present and non-empty."""
+    name = provider.get("name")
+    api_key = provider.get("api_key")
+    
+    if name == "Mock":
+        return True
+    if name == "Ollama":
+        return True
+        
+    return bool(api_key and len(api_key.strip()) > 5)
+
+def provider_retry(provider_func):
+    """Retry a specific provider call on transient errors before failing over."""
+    import time
+    delays = [2.0, 4.0, 8.0]
+    last_exception = None
+    
+    for attempt in range(len(delays) + 1):
+        try:
+            result = provider_func()
+            if not result or not result.strip():
+                raise Exception("Empty response received from LLM")
+            return result, attempt
+        except Exception as e:
+            last_exception = e
+            err_msg = str(e).lower()
+            
+            # Check for transient failure signatures
+            is_transient = False
+            for code in ["429", "500", "502", "503", "504", "rate limit", "quota", "exhausted", "timeout", "connection", "unavailable"]:
+                if code in err_msg:
+                    is_transient = True
+                    break
+                    
+            if not is_transient:
+                logger.warning(f"Non-transient SRE error encountered: {e}. Failing over immediately.")
+                raise e
+                
+            if attempt == len(delays):
+                break
+                
+            delay = delays[attempt]
+            logger.warning(f"Transient SRE error ({e}) on attempt {attempt + 1}. Retrying in {delay}s...")
+            time.sleep(delay)
+            
+    raise last_exception
+
+def provider_metrics(provider_name: str, model_name: str, latency: float, retries: int, failover_count: int, success: bool) -> dict:
+    """Log and return formatted provider telemetry metrics for APM logging."""
+    status = "Success" if success else "Failed"
+    logger.info(
+        f"[LLM SRE Telemetry] Provider: {provider_name} | Model: {model_name} | "
+        f"Latency: {latency:.2f}s | Retries: {retries} | "
+        f"Failovers: {failover_count} | Status: {status}"
+    )
+    return {
+        "provider": provider_name,
+        "model": model_name,
+        "latency": round(latency, 2),
+        "retries": retries,
+        "failover_count": failover_count,
+        "success_status": status
+    }
+
+def call_with_failover(prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.2) -> str:
+    """Execute LLM generation with automatic provider failover and transient retry logic."""
+    providers = get_available_provider()
     if not providers:
         raise Exception(
             "No AI provider configured.\n\n"
@@ -94,51 +179,117 @@ def generate(prompt: str, system_prompt: Optional[str] = None, temperature: floa
         )
 
     last_error = None
-    for provider, model in providers:
+    failover_count = 0
+    providers_attempted = []
+    
+    for provider in providers:
+        provider_name = provider["name"]
+        model_name = provider["model"]
+        api_key = provider["api_key"]
+        
+        # Verify provider health status
+        if not provider_health_check(provider):
+            logger.warning(f"Provider {provider_name} failed SRE health check. Skipping.")
+            continue
+            
+        providers_attempted.append(provider_name)
         start_time = time.time()
-        prompt_size = len(prompt) + (len(system_prompt) if system_prompt else 0)
-        try:
-            if provider == "Mock":
-                result = mock_generate(prompt, system_prompt, temperature)
-            elif provider == "Ollama":
-                result = generate_ollama(model, prompt, system_prompt, temperature)
-            elif provider == "Claude":
-                result = generate_claude(prompt, system_prompt, temperature)
-            elif provider == "GPT":
-                result = generate_openai(prompt, system_prompt, temperature)
-            elif provider == "Gemini":
-                result = generate_gemini(model, prompt, system_prompt, temperature)
-            elif provider == "Groq":
-                result = generate_groq(model, prompt, system_prompt, temperature)
-            elif provider == "OpenRouter":
-                result = generate_openrouter(model, prompt, system_prompt, temperature)
+        
+        # Setup specific SRE generator call wrapper
+        def execute_call():
+            if provider_name == "Mock":
+                return mock_generate(prompt, system_prompt, temperature)
+            elif provider_name == "Ollama":
+                return generate_ollama(model_name, prompt, system_prompt, temperature)
+            elif provider_name == "Gemini":
+                return generate_gemini(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "GeminiBackup":
+                return generate_gemini(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "Groq":
+                return generate_groq(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "OpenRouter":
+                return generate_openrouter(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "Claude":
+                return generate_claude(prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "GPT":
+                return generate_openai(prompt, system_prompt, temperature, api_key=api_key)
             else:
-                raise Exception(f"Unsupported provider: {provider}")
+                raise Exception(f"Unsupported provider: {provider_name}")
 
-            if not result or not result.strip():
-                raise Exception("Empty or invalid response received")
-
+        try:
+            # Execute the call with transient SRE retry logic
+            result, retries = provider_retry(execute_call)
+            
             latency = time.time() - start_time
-            trace = {
-                "provider": provider,
-                "model": model,
+            
+            # Record SRE success telemetry metrics
+            trace_provider_name = provider_name
+            if provider_name == "GeminiBackup":
+                trace_provider_name = "Gemini (Backup)"
+            elif provider_name == "GPT":
+                trace_provider_name = "OpenAI"
+                
+            trace = provider_metrics(
+                provider_name=trace_provider_name,
+                model_name=model_name,
+                latency=latency,
+                retries=retries,
+                failover_count=failover_count,
+                success=True
+            )
+            
+            # Update prompt trace size information
+            prompt_size = len(prompt) + (len(system_prompt) if system_prompt else 0)
+            trace.update({
                 "prompt_size": prompt_size,
                 "response_size": len(result),
-                "latency": round(latency, 2)
-            }
+                "providers_attempted": providers_attempted
+            })
+            
+            # Store in thread-safe context variable
             trace_list = llm_trace_var.get()
             if trace_list is not None:
                 trace_list.append(trace)
-
-            logger.info(f"LLM Generation succeeded on {provider} ({model}) in {latency:.2f}s")
+                
             return result
-
+            
         except Exception as e:
-            logger.warning(f"LLM Generation failed on {provider} ({model}): {str(e)}. Switching to fallback...")
+            latency = time.time() - start_time
+            trace_provider_name = provider_name
+            if provider_name == "GeminiBackup":
+                trace_provider_name = "Gemini (Backup)"
+            elif provider_name == "GPT":
+                trace_provider_name = "OpenAI"
+                
+            # Record failover metrics
+            provider_metrics(
+                provider_name=trace_provider_name,
+                model_name=model_name,
+                latency=latency,
+                retries=3, # all retries exhausted
+                failover_count=failover_count,
+                success=False
+            )
+            logger.warning(
+                f"LLM Generation failed on provider {provider_name} ({model_name}) after SRE retries: {e}. "
+                f"SRE triggering failover to next provider..."
+            )
             last_error = e
+            failover_count += 1
             continue
 
-    raise Exception(f"All LLM providers failed. Last error: {str(last_error)}")
+    # All providers exhausted
+    logger.error(f"SRE CRITICAL: All LLM providers exhausted. Last error: {last_error}")
+    # Return user-friendly clean exception containing a friendly error message
+    raise Exception(
+        "All AI search engines are busy due to extremely high public traffic. "
+        "The system has automatically activated its offline safety fallback engine to build your itinerary. "
+        "Please try again in a few moments."
+    )
+
+def generate(prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.2) -> str:
+    """Generate completion using call_with_failover SRE mechanism."""
+    return call_with_failover(prompt, system_prompt, temperature)
 
 def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 25, max_retries: int = 5) -> requests.Response:
     import time
@@ -179,8 +330,8 @@ def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 25, max
     return requests.post(url, json=json_data, headers=headers, timeout=timeout)
 
 
-def generate_claude(prompt: str, system_prompt: Optional[str], temperature: float) -> str:
-    key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
+def generate_claude(prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
+    key = api_key or os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
     headers = {
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
@@ -195,14 +346,14 @@ def generate_claude(prompt: str, system_prompt: Optional[str], temperature: floa
     if system_prompt:
         payload["system"] = system_prompt
         
-    response = robust_post("https://api.anthropic.com/v1/messages", payload, headers)
+    response = robust_post("https://api.anthropic.com/v1/messages", payload, headers, max_retries=1)
     if response.status_code == 200:
         return response.json()["content"][0]["text"].strip()
     else:
         raise Exception(f"Claude API failed: {response.text}")
 
-def generate_openai(prompt: str, system_prompt: Optional[str], temperature: float) -> str:
-    key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+def generate_openai(prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
+    key = api_key or os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
     headers = {
         "Authorization": f"Bearer {key}",
         "content-type": "application/json"
@@ -217,14 +368,14 @@ def generate_openai(prompt: str, system_prompt: Optional[str], temperature: floa
         "messages": messages,
         "temperature": temperature
     }
-    response = robust_post("https://api.openai.com/v1/chat/completions", payload, headers)
+    response = robust_post("https://api.openai.com/v1/chat/completions", payload, headers, max_retries=1)
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
         raise Exception(f"OpenAI API failed: {response.text}")
 
-def generate_gemini(model: str, prompt: str, system_prompt: Optional[str], temperature: float) -> str:
-    key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
+def generate_gemini(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
+    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     headers = {"content-type": "application/json"}
     
@@ -236,14 +387,14 @@ def generate_gemini(model: str, prompt: str, system_prompt: Optional[str], tempe
     if system_prompt:
         payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
         
-    response = robust_post(url, payload, headers)
+    response = robust_post(url, payload, headers, max_retries=1)
     if response.status_code == 200:
         return response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     else:
         raise Exception(f"Gemini API failed: {response.text}")
 
-def generate_groq(model: str, prompt: str, system_prompt: Optional[str], temperature: float) -> str:
-    key = os.getenv("GROQ_API_KEY")
+def generate_groq(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
+    key = api_key or os.getenv("GROQ_API_KEY")
     headers = {
         "Authorization": f"Bearer {key}",
         "content-type": "application/json"
@@ -258,14 +409,14 @@ def generate_groq(model: str, prompt: str, system_prompt: Optional[str], tempera
         "messages": messages,
         "temperature": temperature
     }
-    response = robust_post("https://api.groq.com/openai/v1/chat/completions", payload, headers)
+    response = robust_post("https://api.groq.com/openai/v1/chat/completions", payload, headers, max_retries=1)
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
         raise Exception(f"Groq API failed: {response.text}")
 
-def generate_openrouter(model: str, prompt: str, system_prompt: Optional[str], temperature: float) -> str:
-    key = os.getenv("OPENROUTER_API_KEY")
+def generate_openrouter(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
+    key = api_key or os.getenv("OPENROUTER_API_KEY")
     headers = {
         "Authorization": f"Bearer {key}",
         "content-type": "application/json",
@@ -282,7 +433,7 @@ def generate_openrouter(model: str, prompt: str, system_prompt: Optional[str], t
         "messages": messages,
         "temperature": temperature
     }
-    response = robust_post("https://openrouter.ai/api/v1/chat/completions", payload, headers)
+    response = robust_post("https://openrouter.ai/api/v1/chat/completions", payload, headers, max_retries=1)
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:

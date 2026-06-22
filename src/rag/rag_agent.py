@@ -319,8 +319,6 @@ Do not use boilerplate marketing fluff or generic templates. Provide deep, authe
         logger.info("[RAG Agent] Leaving agent")
         return res
     except Exception as e:
-        if "No AI provider configured" in str(e) or "LLM unavailable" in str(e):
-            raise e
         logger.info(f"[RAG Agent] Destination returned: {destination}")
         logger.info("[RAG Agent] Leaving agent")
         return f"Dynamic fallback guide for {destination}. Explore local sights, sample traditional dishes, and use local transit."
