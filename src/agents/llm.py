@@ -49,7 +49,7 @@ def get_available_provider() -> list[dict[str, Any]]:
     # 1. Gemini Free
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
     if gemini_key and gemini_key.strip():
-        providers.append({"name": "Gemini", "model": "gemini-2.5-flash", "api_key": gemini_key})
+        providers.append({"name": "Gemini", "model": "gemini-2.5-flash-lite", "api_key": gemini_key})
 
     # 2. Groq Free
     groq_key = os.getenv("GROQ_API_KEY")
@@ -64,7 +64,7 @@ def get_available_provider() -> list[dict[str, Any]]:
     # 4. Gemini Backup Key
     gemini_backup = os.getenv("GEMINI_API_KEY_BACKUP")
     if gemini_backup and gemini_backup.strip():
-        providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash", "api_key": gemini_backup})
+        providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash-lite", "api_key": gemini_backup})
 
     # 5. Claude
     claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")

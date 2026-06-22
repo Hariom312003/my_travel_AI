@@ -63,7 +63,7 @@ def get_primary_telemetry() -> tuple[str, str]:
             return name, model
     except Exception:
         pass
-    return "Gemini", "gemini-2.5-flash"
+    return "Gemini", "gemini-2.5-flash-lite"
 
 # ── Node functions ───────────────────────────
 def node_parse_query(state: TravelState) -> TravelState:
