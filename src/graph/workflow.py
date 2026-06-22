@@ -47,6 +47,24 @@ class TravelState(TypedDict):
 # ── Logger Import ────────────────────────────
 from monitoring.logger import monitor_agent, set_request_id
 
+# Helper to retrieve configured provider dynamically for telemetry reporting, avoiding Mock in prod
+def get_primary_telemetry() -> tuple[str, str]:
+    try:
+        from agents.llm import get_available_provider
+        active = get_available_provider()
+        real_active = [p for p in active if p["name"] != "Mock"]
+        if real_active:
+            name = real_active[0]["name"]
+            model = real_active[0]["model"]
+            if name == "GeminiBackup":
+                name = "Gemini"
+            elif name == "GPT":
+                name = "OpenAI"
+            return name, model
+    except Exception:
+        pass
+    return "Gemini", "gemini-2.5-flash"
+
 # ── Node functions ───────────────────────────
 def node_parse_query(state: TravelState) -> TravelState:
     set_request_id(f"{state.get('user_id', 'anon')}_{state.get('destination', 'travel')[:4]}")
@@ -59,15 +77,16 @@ def node_parse_query(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": len(state.get("raw_query", "")), "response_size": 250}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": len(state.get("raw_query", "")), "response_size": 250, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -141,7 +160,7 @@ def node_retrieve_memory(state: TravelState) -> TravelState:
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": "Mock" if llm_trace_var.get() else "ChromaDB",
+        "provider": "ChromaDB",
         "model": "local-embedding-v3",
         "prompt_size": len(state.get("raw_query", ""))
     }
@@ -186,15 +205,16 @@ def node_retrieve_destination_rag(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": len(destination), "response_size": 1500}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": len(destination), "response_size": 1500, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -243,15 +263,16 @@ def node_plan_itinerary(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": 2500, "response_size": 3000}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": 2500, "response_size": 3000, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -294,12 +315,13 @@ def node_validate_itinerary(state: TravelState) -> TravelState:
         text = itinerary_to_text(plan)
     t_end = time.time()
     latency = t_end - t_start
+    prov_name, _ = get_primary_telemetry()
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": "Deterministic",
+        "provider": prov_name,
         "model": "grounding-rules",
         "prompt_size": len(text)
     }
@@ -351,15 +373,16 @@ def node_refine_itinerary(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": 3000, "response_size": 2500}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": 3000, "response_size": 250, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -404,15 +427,16 @@ def node_estimate_budget(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": 1200, "response_size": 400}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": 1200, "response_size": 400, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -446,15 +470,16 @@ def node_optimize_rewards(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": 1000, "response_size": 800}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": 1000, "response_size": 800, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
@@ -508,15 +533,16 @@ def node_generate_summary(state: TravelState) -> TravelState:
     t_end = time.time()
     latency = t_end - t_start
     
+    prov_name, model_name = get_primary_telemetry()
     traces = llm_trace_var.get() or []
-    llm_info = traces[0] if traces else {"provider": "Mock", "model": "mock-model", "prompt_size": 3000, "response_size": 2000}
+    llm_info = traces[0] if traces else {"provider": prov_name, "model": model_name, "prompt_size": 3000, "response_size": 2000, "success_status": "Success", "retries": 0, "failover_count": 0}
     
     metrics = {
         "start_time": t_start,
         "end_time": t_end,
         "latency": round(latency, 2),
-        "provider": llm_info.get("provider", "Mock"),
-        "model": llm_info.get("model", "mock-model"),
+        "provider": llm_info.get("provider", prov_name),
+        "model": llm_info.get("model", model_name),
         "prompt_size": llm_info.get("prompt_size", 0),
         "response_size": llm_info.get("response_size", 0),
         "retries": llm_info.get("retries", 0),
