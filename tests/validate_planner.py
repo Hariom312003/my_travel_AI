@@ -23,9 +23,9 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 # Force mock key for validation if no real keys exist in env
-if not any(os.environ.get(k) for k in ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "CLAUDE_API_KEY", "OPENAI_API_KEY"]):
+if not any(os.environ.get(k) for k in ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"]):
     print("No API keys found. Running validator in sandbox/mock mode.")
-    os.environ["CLAUDE_API_KEY"] = "mock_test_key"
+    os.environ["GEMINI_API_KEY"] = "mock_test_key"
 else:
     print("API keys found. Running validator in live production mode.")
 

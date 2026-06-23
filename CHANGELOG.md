@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-06-23
+
+### Added
+* Deployed multi-LLM SRE failover chain: `Gemini Free -> Groq Free -> OpenRouter Free -> Gemini Backup -> Groq Backup -> OpenRouter Backup`.
+* Implemented backup API key configuration in `src/agents/llm.py` via `GEMINI_API_KEY_BACKUP`, `GROQ_API_KEY_BACKUP`, and `OPENROUTER_API_KEY_BACKUP`.
+* Configured automated failover telemetry mapping to standard strings (`Gemini`, `Groq`, `OpenRouter`) for clear audit logs.
+* Increased API timeout parameter in `robust_post` requests to 120 seconds to guarantee successful generation of large (e.g. 15-day) itineraries.
+
+### Removed
+* Removed all legacy Claude, OpenAI, and Mock providers from production execution paths to enforce actual provider execution.
+
+---
+
 ## [1.2.0] - 2026-06-18
 
 ### Added

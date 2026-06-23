@@ -290,7 +290,7 @@ def generate(prompt: str, system_prompt: Optional[str] = None, temperature: floa
     """Generate completion using call_with_failover SRE mechanism."""
     return call_with_failover(prompt, system_prompt, temperature)
 
-def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 25, max_retries: int = 5) -> requests.Response:
+def robust_post(url: str, json_data: dict, headers: dict, timeout: int = 120, max_retries: int = 5) -> requests.Response:
     import time
     import re
     delay = 1.0

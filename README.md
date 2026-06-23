@@ -93,13 +93,13 @@ Check real-time agent execution latency, model providers, explainability logs, a
 ## 🛠️ Technical Stack
 
 * **Core & Orchestration:** Python 3.11+, LangGraph, LangChain Core
-* **Supported LLMs:** Multi-provider failover chain:
-  * **Google Gemini** (`gemini-2.5-flash`)
-  * **Groq** (`llama-3.3-70b-versatile`)
-  * **OpenRouter** (`meta-llama/llama-3.3-70b-instruct:free`)
-  * **Anthropic Claude** (`claude-3-5-sonnet-20241022`)
-  * **OpenAI GPT** (`gpt-4o`)
-  * **Mock LLM** for offline tests and development
+* **Supported LLMs:** Multi-LLM provider failover pipeline:
+  1. **Google Gemini Free** (`gemini-2.5-flash-lite`) - Primary
+  2. **Groq Free** (`llama-3.3-70b-versatile`)
+  3. **OpenRouter Free** (`meta-llama/llama-3.3-70b-instruct:free`)
+  4. **Google Gemini Backup** (`gemini-2.5-flash-lite`)
+  5. **Groq Backup** (`llama-3.3-70b-versatile`)
+  6. **OpenRouter Backup** (`meta-llama/llama-3.3-70b-instruct:free`)
 * **Vector Database:** ChromaDB
 * **API Framework:** FastAPI, Uvicorn
 * **Frontend Dashboard:** Streamlit (Custom high-contrast dark-mode theme, glassmorphic card layouts, and local typography)
@@ -156,17 +156,17 @@ Create a `.env` file in the root directory:
 ```env
 # Primary LLM API Keys
 GEMINI_API_KEY=your_gemini_api_key_here
-
-# Fallback LLM API Keys (Highly recommended for 100% uptime failover)
 GROQ_API_KEY=your_groq_api_key_here
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
-CLAUDE_API_KEY=your_claude_api_key_here
+
+# Backup LLM API Keys (For SRE failover resilience)
+GEMINI_API_KEY_BACKUP=your_backup_gemini_key_here
+GROQ_API_KEY_BACKUP=your_backup_groq_key_here
+OPENROUTER_API_KEY_BACKUP=your_backup_openrouter_key_here
 
 # Configurations
+ENVIRONMENT=production
 MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
-USE_OLLAMA=False
-OLLAMA_URL=http://localhost:11434
 ```
 
 ---
