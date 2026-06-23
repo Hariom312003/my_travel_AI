@@ -187,7 +187,7 @@ st.markdown("""
 def check_api_status() -> bool:
     try:
         r = requests.get(f"{API_URL}/health", timeout=1)
-        return r.status_code == 200
+        return r.status_code == 200 and r.json().get("status") == "healthy"
     except Exception:
         return False
 
