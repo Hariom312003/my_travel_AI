@@ -58,6 +58,10 @@ def get_primary_telemetry() -> tuple[str, str]:
             model = real_active[0]["model"]
             if name == "GeminiBackup":
                 name = "Gemini"
+            elif name == "GroqBackup":
+                name = "Groq"
+            elif name == "OpenRouterBackup":
+                name = "OpenRouter"
             elif name == "GPT":
                 name = "OpenAI"
             return name, model

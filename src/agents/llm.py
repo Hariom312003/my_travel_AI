@@ -24,27 +24,7 @@ llm_trace_var = contextvars.ContextVar("llm_trace", default=None)
 
 def get_available_provider() -> list[dict[str, Any]]:
     """Get all configured LLM providers in target priority order."""
-    # Check if mock mode is explicitly requested or keys are mock keys
-    is_mock = os.getenv("MOCK_LLM", "False").lower() in ("true", "1", "yes")
-    if not is_mock:
-        for key_name in ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "CLAUDE_API_KEY", "OPENAI_API_KEY"]:
-            if os.getenv(key_name) == "mock_test_key":
-                is_mock = True
-                break
-                
-    if is_mock:
-        logger.warning("======================================================================")
-        logger.warning("SRE WARNING: Running in offline MOCK mode. No real LLM calls will be made.")
-        logger.warning("======================================================================")
-        return [{"name": "Mock", "model": "mock-model", "api_key": "mock_test_key"}]
-
     providers = []
-
-    # 0. Ollama (if enabled)
-    use_ollama = os.getenv("USE_OLLAMA", "False").lower() in ("true", "1", "yes")
-    if use_ollama:
-        model_name = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
-        providers.append({"name": "Ollama", "model": model_name, "api_key": None})
 
     # 1. Gemini Free
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -66,23 +46,32 @@ def get_available_provider() -> list[dict[str, Any]]:
     if gemini_backup and gemini_backup.strip():
         providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash-lite", "api_key": gemini_backup})
 
-    # 5. Claude
-    claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    if claude_key and claude_key.strip():
-        providers.append({"name": "Claude", "model": "claude-3-5-sonnet-20241022", "api_key": claude_key})
+    # 5. Groq Backup Key
+    groq_backup = os.getenv("GROQ_API_KEY_BACKUP")
+    if groq_backup and groq_backup.strip():
+        providers.append({"name": "GroqBackup", "model": "llama-3.3-70b-versatile", "api_key": groq_backup})
 
-    # 6. OpenAI
-    openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-    if openai_key and openai_key.strip():
-        providers.append({"name": "GPT", "model": "gpt-4o", "api_key": openai_key})
+    # 6. OpenRouter Backup Key
+    openrouter_backup = os.getenv("OPENROUTER_API_KEY_BACKUP")
+    if openrouter_backup and openrouter_backup.strip():
+        providers.append({"name": "OpenRouterBackup", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_backup})
 
     return providers
 
 def get_available_providers() -> list[tuple[str, str]]:
     """Legacy compatibility wrapper for get_available_provider()."""
     provs = get_available_provider()
-    # Map name "GeminiBackup" to "Gemini" for backwards compatibility
-    return [(p["name"] if p["name"] != "GeminiBackup" else "Gemini", p["model"]) for p in provs]
+    res = []
+    for p in provs:
+        name = p["name"]
+        if name == "GeminiBackup":
+            name = "Gemini"
+        elif name == "GroqBackup":
+            name = "Groq"
+        elif name == "OpenRouterBackup":
+            name = "OpenRouter"
+        res.append((name, p["model"]))
+    return res
 
 def get_llm() -> tuple[str, str]:
     """Select the primary active LLM provider and model."""
@@ -93,9 +82,7 @@ def get_llm() -> tuple[str, str]:
             "Add one of:\n\n"
             "GEMINI_API_KEY\n"
             "GROQ_API_KEY\n"
-            "OPENROUTER_API_KEY\n"
-            "CLAUDE_API_KEY\n"
-            "OPENAI_API_KEY"
+            "OPENROUTER_API_KEY"
         )
     return providers[0]
 
@@ -104,10 +91,10 @@ def provider_health_check(provider: dict) -> bool:
     name = provider.get("name")
     api_key = provider.get("api_key")
     
-    if name == "Mock":
-        return True
     if name == "Ollama":
         return True
+        
+    return bool(api_key and len(api_key.strip()) > 5)
         
     return bool(api_key and len(api_key.strip()) > 5)
 
@@ -207,7 +194,11 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
                 return generate_gemini(model_name, prompt, system_prompt, temperature, api_key=api_key)
             elif provider_name == "Groq":
                 return generate_groq(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "GroqBackup":
+                return generate_groq(model_name, prompt, system_prompt, temperature, api_key=api_key)
             elif provider_name == "OpenRouter":
+                return generate_openrouter(model_name, prompt, system_prompt, temperature, api_key=api_key)
+            elif provider_name == "OpenRouterBackup":
                 return generate_openrouter(model_name, prompt, system_prompt, temperature, api_key=api_key)
             elif provider_name == "Claude":
                 return generate_claude(prompt, system_prompt, temperature, api_key=api_key)
@@ -226,6 +217,10 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
             trace_provider_name = provider_name
             if provider_name == "GeminiBackup":
                 trace_provider_name = "Gemini (Backup)"
+            elif provider_name == "GroqBackup":
+                trace_provider_name = "Groq (Backup)"
+            elif provider_name == "OpenRouterBackup":
+                trace_provider_name = "OpenRouter (Backup)"
             elif provider_name == "GPT":
                 trace_provider_name = "OpenAI"
                 
@@ -258,6 +253,10 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
             trace_provider_name = provider_name
             if provider_name == "GeminiBackup":
                 trace_provider_name = "Gemini (Backup)"
+            elif provider_name == "GroqBackup":
+                trace_provider_name = "Groq (Backup)"
+            elif provider_name == "OpenRouterBackup":
+                trace_provider_name = "OpenRouter (Backup)"
             elif provider_name == "GPT":
                 trace_provider_name = "OpenAI"
                 
@@ -376,6 +375,9 @@ def generate_openai(prompt: str, system_prompt: Optional[str], temperature: floa
 
 def generate_gemini(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
+    if key and "mock" in key.lower():
+        logger.info("Gemini: mock key detected, calling mock_generate")
+        return mock_generate(prompt, system_prompt, temperature)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     headers = {"content-type": "application/json"}
     
@@ -395,6 +397,9 @@ def generate_gemini(model: str, prompt: str, system_prompt: Optional[str], tempe
 
 def generate_groq(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
     key = api_key or os.getenv("GROQ_API_KEY")
+    if key and "mock" in key.lower():
+        logger.info("Groq: mock key detected, calling mock_generate")
+        return mock_generate(prompt, system_prompt, temperature)
     headers = {
         "Authorization": f"Bearer {key}",
         "content-type": "application/json"
@@ -417,6 +422,9 @@ def generate_groq(model: str, prompt: str, system_prompt: Optional[str], tempera
 
 def generate_openrouter(model: str, prompt: str, system_prompt: Optional[str], temperature: float, api_key: Optional[str] = None) -> str:
     key = api_key or os.getenv("OPENROUTER_API_KEY")
+    if key and "mock" in key.lower():
+        logger.info("OpenRouter: mock key detected, calling mock_generate")
+        return mock_generate(prompt, system_prompt, temperature)
     headers = {
         "Authorization": f"Bearer {key}",
         "content-type": "application/json",
