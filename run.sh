@@ -13,19 +13,29 @@ fi
 # 2. Make sure execution permissions are correct
 chmod +x run_api.sh run_ui.sh
 
-# 3. Start FastAPI server in the background
-echo "Launching FastAPI Backend (port 8000)..."
-./run_api.sh &
-API_PID=$!
+# Determine execution mode based on environment variables
+PORT_VAL=${PORT:-8000}
+SERVICE_NAME_LOWER=$(echo "$RAILWAY_SERVICE_NAME" | tr '[:upper:]' '[:lower:]')
 
-# 4. Wait for API to boot up
-sleep 3
+if [ "$RUN_API" = "true" ] || [[ "$SERVICE_NAME_LOWER" == *"api"* ]] || [[ "$SERVICE_NAME_LOWER" == *"backend"* ]]; then
+    echo "SRE Mode: Launching FastAPI Backend ONLY on port $PORT_VAL..."
+    PORT=$PORT_VAL exec ./run_api.sh
+elif [ "$RUN_UI" = "true" ] || [[ "$SERVICE_NAME_LOWER" == *"ui"* ]] || [[ "$SERVICE_NAME_LOWER" == *"frontend"* ]]; then
+    echo "SRE Mode: Launching Streamlit Frontend ONLY on port $PORT_VAL..."
+    PORT=$PORT_VAL exec ./run_ui.sh
+else
+    # Default: Run both concurrently for local development or combined deployment
+    echo "Launching FastAPI Backend in background (port 8000)..."
+    PORT=8000 ./run_api.sh &
+    API_PID=$!
 
-# 5. Start Streamlit UI in the foreground
-echo "Launching Streamlit Frontend (port 8501)..."
-./run_ui.sh
+    sleep 3
 
-# 6. Cleanup background API process on exit
-echo "Stopping FastAPI Backend..."
-kill $API_PID 2>/dev/null || true
-echo "Done!"
+    echo "Launching Streamlit Frontend in foreground (port 8501)..."
+    PORT=8501 ./run_ui.sh
+
+    # Cleanup background API process on exit
+    echo "Stopping FastAPI Backend..."
+    kill $API_PID 2>/dev/null || true
+    echo "Done!"
+fi

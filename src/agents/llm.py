@@ -41,17 +41,27 @@ def get_available_provider() -> list[dict[str, Any]]:
     if openrouter_key and openrouter_key.strip():
         providers.append({"name": "OpenRouter", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_key})
 
-    # 4. Gemini Backup Key
+    # 4. Claude
+    claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    if claude_key and claude_key.strip():
+        providers.append({"name": "Claude", "model": "claude-3-5-sonnet-20241022", "api_key": claude_key})
+
+    # 5. OpenAI GPT
+    openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+    if openai_key and openai_key.strip():
+        providers.append({"name": "GPT", "model": "gpt-4o", "api_key": openai_key})
+
+    # 6. Gemini Backup Key
     gemini_backup = os.getenv("GEMINI_API_KEY_BACKUP")
     if gemini_backup and gemini_backup.strip():
         providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash-lite", "api_key": gemini_backup})
 
-    # 5. Groq Backup Key
+    # 7. Groq Backup Key
     groq_backup = os.getenv("GROQ_API_KEY_BACKUP")
     if groq_backup and groq_backup.strip():
         providers.append({"name": "GroqBackup", "model": "llama-3.3-70b-versatile", "api_key": groq_backup})
 
-    # 6. OpenRouter Backup Key
+    # 8. OpenRouter Backup Key
     openrouter_backup = os.getenv("OPENROUTER_API_KEY_BACKUP")
     if openrouter_backup and openrouter_backup.strip():
         providers.append({"name": "OpenRouterBackup", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_backup})
@@ -70,6 +80,8 @@ def get_available_providers() -> list[tuple[str, str]]:
             name = "Groq"
         elif name == "OpenRouterBackup":
             name = "OpenRouter"
+        elif name == "GPT":
+            name = "OpenAI"
         res.append((name, p["model"]))
     return res
 
