@@ -30,9 +30,8 @@ RUN python -c "import sys, os; sys.path.insert(0, os.path.abspath('src')); from 
 # Make scripts executable
 RUN chmod +x run.sh run_api.sh run_ui.sh
 
-# Expose ports
-EXPOSE 8000
-EXPOSE 8501
+# Default environment variables for container execution
+ENV RUN_API=true
 
-# Default command launches both FastAPI and Streamlit UI via run.sh
+# Default command launches backend or frontend based on environment variables
 CMD ["/bin/bash", "run.sh"]
