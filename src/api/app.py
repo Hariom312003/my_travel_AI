@@ -120,7 +120,17 @@ def root():
 @app.get("/health")
 def health_check():
     """Health check endpoint to verify API server status."""
-    return {"status": "healthy", "version": "1.0.0"}
+    from agents.llm import get_available_provider
+    try:
+        providers = get_available_provider()
+        configured = [p["name"] for p in providers]
+    except Exception as e:
+        configured = [f"Error: {str(e)}"]
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "configured_providers": configured
+    }
 
 @app.post("/plan")
 def plan_trip(req: TripRequest):
