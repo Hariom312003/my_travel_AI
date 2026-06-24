@@ -679,3 +679,27 @@ def run_downstream_agents_bg(state: TravelState):
             
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
+
+
+def run_downstream_agents_sync(state: TravelState) -> TravelState:
+    """Executes the downstream steps (budget, rewards, memory, summary) synchronously."""
+    from agents.common import save_trip_state_to_file
+    from monitoring.logger import logger
+    
+    try:
+        logger.info("Starting synchronous downstream agents execution...")
+        # 1. Budget
+        s_budget = node_estimate_budget(state)
+        # 2. Rewards
+        s_rewards = node_optimize_rewards(s_budget)
+        # 3. Store Memory
+        s_memory = node_store_memory(s_rewards)
+        # 4. Generate Summary
+        s_summary = node_generate_summary(s_memory)
+        s_summary["status"] = "completed"
+        save_trip_state_to_file(s_summary["user_id"], s_summary)
+        logger.info("Synchronous downstream agents execution completed successfully.")
+        return s_summary
+    except Exception as e:
+        logger.error(f"Error in synchronous downstream execution: {e}")
+        return state

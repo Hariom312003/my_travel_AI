@@ -140,11 +140,11 @@ def plan_trip(req: TripRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query cannot be empty")
     try:
-        from graph.workflow import run_downstream_agents_bg
+        from graph.workflow import run_downstream_agents_sync
         from agents.common import save_trip_state_to_file
         result = travel_graph.invoke(_initial_state(req.user_id, req.query))
+        result = run_downstream_agents_sync(result)
         save_trip_state_to_file(req.user_id, result)
-        run_downstream_agents_bg(result)
         return _response(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
@@ -161,7 +161,7 @@ def refine_trip_endpoint(req: RefineRequest):
     if not req.feedback.strip():
         raise HTTPException(status_code=400, detail="feedback cannot be empty")
     try:
-        from graph.workflow import run_downstream_agents_bg
+        from graph.workflow import run_downstream_agents_sync
         from agents.common import save_trip_state_to_file
         state = {
             **_initial_state(req.user_id, req.current_state.get("raw_query", "")),
@@ -170,8 +170,8 @@ def refine_trip_endpoint(req: RefineRequest):
             "user_feedback": req.feedback
         }
         result = refinement_graph.invoke(state)
+        result = run_downstream_agents_sync(result)
         save_trip_state_to_file(req.user_id, result)
-        run_downstream_agents_bg(result)
         return _response(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
