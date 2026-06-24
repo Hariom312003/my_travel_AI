@@ -32,8 +32,8 @@ RUN chmod +x run.sh run_api.sh run_ui.sh
 
 # Default environment variables for container execution
 ENV RUN_API=true
-ENV PORT=8000
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 
 # Default command launches backend or frontend based on environment variables
 CMD ["/bin/bash", "run.sh"]
