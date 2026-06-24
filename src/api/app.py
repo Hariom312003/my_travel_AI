@@ -14,7 +14,7 @@ load_dotenv()
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from graph.workflow import travel_graph, refinement_graph, TravelState
 from memory.memory_agent import get_all_user_memory, store_behavioral_memory
@@ -132,13 +132,30 @@ def health_check():
         "configured_providers": configured
     }
 
+@app.get("/provider-health")
+def provider_health():
+    """Retrieve live provider failover and cooldown telemetry metrics."""
+    from agents.llm import get_telemetry_health
+    try:
+        return get_telemetry_health()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch provider health: {str(e)}")
+
 @app.post("/plan")
-def plan_trip(req: TripRequest):
+def plan_trip(req: TripRequest, x_force_unavailable: str | None = Header(default=None)):
     """Generate a structured, validated, and optimized trip plan from a query."""
     if not req.user_id.strip():
         raise HTTPException(status_code=400, detail="user_id cannot be empty")
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query cannot be empty")
+    
+    # Handle dynamic provider forcing for validation/telemetry tests
+    token = None
+    if x_force_unavailable:
+        from agents.llm import forced_unavailable_providers_var
+        forced = [p.strip() for p in x_force_unavailable.split(",")]
+        token = forced_unavailable_providers_var.set(forced)
+        
     try:
         from graph.workflow import run_downstream_agents_sync
         from agents.common import save_trip_state_to_file
@@ -148,18 +165,30 @@ def plan_trip(req: TripRequest):
         return _response(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
+    finally:
+        if token:
+            from agents.llm import forced_unavailable_providers_var
+            forced_unavailable_providers_var.reset(token)
 
 @app.post("/generate-trip", deprecated=True)
 def generate_trip(req: TripRequest):
     return plan_trip(req)
 
 @app.post("/refine")
-def refine_trip_endpoint(req: RefineRequest):
+def refine_trip_endpoint(req: RefineRequest, x_force_unavailable: str | None = Header(default=None)):
     """Apply surgical refinements to an existing trip plan based on user feedback."""
     if not req.user_id.strip():
         raise HTTPException(status_code=400, detail="user_id cannot be empty")
     if not req.feedback.strip():
         raise HTTPException(status_code=400, detail="feedback cannot be empty")
+        
+    # Handle dynamic provider forcing for validation/telemetry tests
+    token = None
+    if x_force_unavailable:
+        from agents.llm import forced_unavailable_providers_var
+        forced = [p.strip() for p in x_force_unavailable.split(",")]
+        token = forced_unavailable_providers_var.set(forced)
+        
     try:
         from graph.workflow import run_downstream_agents_sync
         from agents.common import save_trip_state_to_file
@@ -175,6 +204,10 @@ def refine_trip_endpoint(req: RefineRequest):
         return _response(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
+    finally:
+        if token:
+            from agents.llm import forced_unavailable_providers_var
+            forced_unavailable_providers_var.reset(token)
 
 @app.post("/refine-trip", deprecated=True)
 def refine_trip(req: RefineRequest):

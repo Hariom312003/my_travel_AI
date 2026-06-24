@@ -21,6 +21,81 @@ from agents.demo_data import DEMO_ATTRACTIONS, DEMO_FOOD
 
 # Thread/Async-safe context variable to store LLM traces
 llm_trace_var = contextvars.ContextVar("llm_trace", default=None)
+forced_unavailable_providers_var = contextvars.ContextVar("forced_unavailable", default=[])
+
+PROVIDER_HEALTH = {}
+
+def parse_cooldown_seconds(error_msg: str) -> float:
+    # Look for google rpc retryDelay e.g. "35s" or "35.5s"
+    match = re.search(r'"retryDelay":\s*"([\d\.]+)s"', error_msg)
+    if match:
+        return float(match.group(1))
+    # Look for "Please retry in X.Ys"
+    match2 = re.search(r"Please retry in ([\d\.]+)s", error_msg)
+    if match2:
+        return float(match2.group(1))
+    # Look for "retry after X seconds"
+    match3 = re.search(r"retry after (\d+) seconds", error_msg, re.IGNORECASE)
+    if match3:
+        return float(match3.group(1))
+    return 60.0 # Default cooldown
+
+def get_telemetry_health() -> list[dict[str, Any]]:
+    # We want to return status for ALL known providers in exact priority order
+    known_providers = [
+        {"name": "Gemini", "env_var": "GEMINI_API_KEY", "model": "gemini-2.5-flash-lite"},
+        {"name": "Groq", "env_var": "GROQ_API_KEY", "model": "llama-3.3-70b-versatile"},
+        {"name": "OpenRouter", "env_var": "OPENROUTER_API_KEY", "model": "meta-llama/llama-3.3-70b-instruct:free"},
+        {"name": "GeminiBackup", "env_var": "GEMINI_API_KEY_BACKUP", "model": "gemini-2.5-flash-lite"},
+        {"name": "GroqBackup", "env_var": "GROQ_API_KEY_BACKUP", "model": "llama-3.3-70b-versatile"},
+        {"name": "OpenRouterBackup", "env_var": "OPENROUTER_API_KEY_BACKUP", "model": "meta-llama/llama-3.3-70b-instruct:free"}
+    ]
+    
+    result = []
+    for kp in known_providers:
+        name = kp["name"]
+        env_val = os.getenv(kp["env_var"]) or (os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY") if name == "Gemini" else None)
+        is_configured = bool(env_val and env_val.strip())
+        
+        health = PROVIDER_HEALTH.get(name)
+        if not health:
+            health = {
+                "provider": name,
+                "model": kp["model"],
+                "success_count": 0,
+                "failure_count": 0,
+                "429_count": 0,
+                "last_success": None,
+                "last_failure": None,
+                "cooldown_expiry": 0.0
+            }
+            if is_configured:
+                PROVIDER_HEALTH[name] = health
+                
+        cooldown_left = 0
+        if health["cooldown_expiry"] > time.time():
+            cooldown_left = int(health["cooldown_expiry"] - time.time())
+            
+        if not is_configured:
+            status = "inactive"
+        elif cooldown_left > 0:
+            status = "cooldown"
+        else:
+            status = "healthy"
+            
+        successes = health["success_count"]
+        failures = health["failure_count"]
+        total = successes + failures
+        success_rate = 1.0 if total == 0 else round(successes / total, 2)
+        
+        result.append({
+            "provider": name,
+            "status": status,
+            "cooldown": cooldown_left,
+            "success_rate": success_rate,
+            "failovers": failures
+        })
+    return result
 
 def get_available_provider() -> list[dict[str, Any]]:
     """Get all configured LLM providers in target priority order."""
@@ -41,30 +116,30 @@ def get_available_provider() -> list[dict[str, Any]]:
     if openrouter_key and openrouter_key.strip():
         providers.append({"name": "OpenRouter", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_key})
 
-    # 4. Claude
-    claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    if claude_key and claude_key.strip():
-        providers.append({"name": "Claude", "model": "claude-3-5-sonnet-20241022", "api_key": claude_key})
-
-    # 5. OpenAI GPT
-    openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-    if openai_key and openai_key.strip():
-        providers.append({"name": "GPT", "model": "gpt-4o", "api_key": openai_key})
-
-    # 6. Gemini Backup Key
+    # 4. Gemini Backup Key
     gemini_backup = os.getenv("GEMINI_API_KEY_BACKUP")
     if gemini_backup and gemini_backup.strip():
         providers.append({"name": "GeminiBackup", "model": "gemini-2.5-flash-lite", "api_key": gemini_backup})
 
-    # 7. Groq Backup Key
+    # 5. Groq Backup Key
     groq_backup = os.getenv("GROQ_API_KEY_BACKUP")
     if groq_backup and groq_backup.strip():
         providers.append({"name": "GroqBackup", "model": "llama-3.3-70b-versatile", "api_key": groq_backup})
 
-    # 8. OpenRouter Backup Key
+    # 6. OpenRouter Backup Key
     openrouter_backup = os.getenv("OPENROUTER_API_KEY_BACKUP")
     if openrouter_backup and openrouter_backup.strip():
         providers.append({"name": "OpenRouterBackup", "model": "meta-llama/llama-3.3-70b-instruct:free", "api_key": openrouter_backup})
+
+    # 7. Claude
+    claude_key = os.getenv("CLAUDE_API_KEY") or os.getenv("CLAUDE_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    if claude_key and claude_key.strip():
+        providers.append({"name": "Claude", "model": "claude-3-5-sonnet-20241022", "api_key": claude_key})
+
+    # 8. OpenAI GPT
+    openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+    if openai_key and openai_key.strip():
+        providers.append({"name": "GPT", "model": "gpt-4o", "api_key": openai_key})
 
     return providers
 
@@ -107,13 +182,11 @@ def provider_health_check(provider: dict) -> bool:
         return True
         
     return bool(api_key and len(api_key.strip()) > 5)
-        
-    return bool(api_key and len(api_key.strip()) > 5)
 
 def provider_retry(provider_func):
     """Retry a specific provider call on transient errors before failing over."""
     import time
-    delays = [2.0, 4.0, 8.0]
+    delays = [5.0, 10.0, 20.0, 40.0]
     last_exception = None
     
     for attempt in range(len(delays) + 1):
@@ -126,9 +199,20 @@ def provider_retry(provider_func):
             last_exception = e
             err_msg = str(e).lower()
             
+            # Check for rate limit / quota exhaustion to failover immediately
+            is_rate_limit = False
+            for code in ["429", "quota", "exhausted"]:
+                if code in err_msg:
+                    is_rate_limit = True
+                    break
+            
+            if is_rate_limit:
+                logger.warning(f"Rate limit or quota exhaustion ({e}). Failing over immediately without retry.")
+                raise e
+            
             # Check for transient failure signatures
             is_transient = False
-            for code in ["429", "500", "502", "503", "504", "rate limit", "quota", "exhausted", "timeout", "connection", "unavailable"]:
+            for code in ["500", "502", "503", "504", "rate limit", "timeout", "connection", "unavailable"]:
                 if code in err_msg:
                     is_transient = True
                     break
@@ -191,6 +275,19 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
             logger.warning(f"Provider {provider_name} failed SRE health check. Skipping.")
             continue
             
+        # Check if provider is forced unavailable
+        forced = forced_unavailable_providers_var.get()
+        if forced and provider_name in forced:
+            logger.warning(f"Provider {provider_name} forced unavailable via SRE validation context. Skipping.")
+            continue
+            
+        # Check if provider is cooling down
+        health = PROVIDER_HEALTH.get(provider_name)
+        if health and health.get("cooldown_expiry", 0.0) > time.time():
+            cooldown_left = health["cooldown_expiry"] - time.time()
+            logger.warning(f"Provider {provider_name} is cooling down for another {cooldown_left:.1f}s. Skipping.")
+            continue
+            
         providers_attempted.append(provider_name)
         start_time = time.time()
         
@@ -224,6 +321,20 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
             result, retries = provider_retry(execute_call)
             
             latency = time.time() - start_time
+            
+            # Update PROVIDER_HEALTH success status
+            h = PROVIDER_HEALTH.setdefault(provider_name, {
+                "provider": provider_name,
+                "model": model_name,
+                "success_count": 0,
+                "failure_count": 0,
+                "429_count": 0,
+                "last_success": None,
+                "last_failure": None,
+                "cooldown_expiry": 0.0
+            })
+            h["success_count"] += 1
+            h["last_success"] = time.time()
             
             # Record SRE success telemetry metrics
             trace_provider_name = provider_name
@@ -271,6 +382,33 @@ def call_with_failover(prompt: str, system_prompt: Optional[str] = None, tempera
                 trace_provider_name = "OpenRouter (Backup)"
             elif provider_name == "GPT":
                 trace_provider_name = "OpenAI"
+                
+            # Update PROVIDER_HEALTH failure status
+            h = PROVIDER_HEALTH.setdefault(provider_name, {
+                "provider": provider_name,
+                "model": model_name,
+                "success_count": 0,
+                "failure_count": 0,
+                "429_count": 0,
+                "last_success": None,
+                "last_failure": None,
+                "cooldown_expiry": 0.0
+            })
+            h["failure_count"] += 1
+            h["last_failure"] = time.time()
+            
+            err_msg = str(e).lower()
+            is_429 = False
+            for code in ["429", "quota", "exhausted"]:
+                if code in err_msg:
+                    is_429 = True
+                    break
+            
+            if is_429:
+                h["429_count"] += 1
+                cooldown_secs = parse_cooldown_seconds(str(e))
+                h["cooldown_expiry"] = time.time() + cooldown_secs
+                logger.warning(f"Provider {provider_name} entered cooldown for {cooldown_secs}s.")
                 
             # Record failover metrics
             provider_metrics(
