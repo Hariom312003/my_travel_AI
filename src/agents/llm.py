@@ -210,6 +210,10 @@ def provider_retry(provider_func):
                 logger.warning(f"Rate limit or quota exhaustion ({e}). Failing over immediately without retry.")
                 raise e
             
+            if "nameresolutionerror" in err_msg or "temporary failure in name resolution" in err_msg or "gaierror" in err_msg:
+                logger.warning(f"DNS name resolution failed or network is offline ({e}). Failing over immediately without retry.")
+                raise e
+
             # Check for transient failure signatures
             is_transient = False
             for code in ["500", "502", "503", "504", "rate limit", "timeout", "connection", "unavailable"]:
