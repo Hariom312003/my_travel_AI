@@ -32,6 +32,29 @@ Return ONLY valid JSON:
 }"""
 
 
+def detect_explicit_category(feedback: str) -> str | None:
+    fb_lower = feedback.lower()
+    if "adventure" in fb_lower:
+        return "adventure"
+    if any(k in fb_lower for k in ["museum", "temple", "culture", "cultural", "heritage", "historic", "historical"]):
+        return "culture"
+    if "cafe" in fb_lower:
+        return "cafe/culture"
+    if "nightlife" in fb_lower or "night life" in fb_lower:
+        return "nightlife"
+    if "beach" in fb_lower or "beaches" in fb_lower:
+        return "beach"
+    if "nature" in fb_lower:
+        return "nature"
+    if any(k in fb_lower for k in ["scenic", "view", "scenery"]):
+        return "scenic"
+    if any(k in fb_lower for k in ["shopping", "market", "bazaar"]):
+        return "shopping"
+    if any(k in fb_lower for k in ["food", "restaurant", "dining"]):
+        return "food"
+    return None
+
+
 def extract_modification_intent(user_feedback: str) -> dict:
     lower = user_feedback.lower()
     add = []
@@ -103,19 +126,31 @@ def _fallback_refine(current_plan: dict[str, Any], user_feedback: str, structure
 
     # 2. Category replacement logic (existing check)
     replace_match = re.search(
-        r"replace day\s*(\d+)\s*with\s*([a-zA-Z\s/]+)(?:activities|stops|places|spots)?", 
-        user_feedback.lower()
+        r"replace day\s*(\d+)\s*with\s*([a-zA-Z\s/]+?)(?:\s*(?:activities|stops|places|spots))?$", 
+        user_feedback.lower().strip()
     )
+    if not replace_match:
+        replace_match = re.search(
+            r"replace day\s*(\d+)\s*with\s*([a-zA-Z\s/]+)", 
+            user_feedback.lower()
+        )
     if replace_match:
         target_day = int(replace_match.group(1))
         category_raw = replace_match.group(2).strip()
-        cat_map = {
-            "cultural": "culture", "culture": "culture", "heritage": "culture", "historic": "culture", "historical": "culture",
-            "scenic": "scenic", "views": "scenic", "nature": "nature", "scenery": "scenic", "beach": "beach", "beaches": "beach",
-            "adventure": "adventure", "shopping": "shopping", "market": "shopping", "bazaar": "shopping",
-            "food": "food", "cafes": "cafe/culture", "cafe": "cafe/culture", "nightlife": "nightlife"
-        }
-        target_cat = cat_map.get(category_raw, "culture")
+        
+        target_cat = detect_explicit_category(user_feedback)
+        if not target_cat:
+            cat_map = {
+                "cultural": "culture", "culture": "culture", "heritage": "culture", "historic": "culture", "historical": "culture",
+                "scenic": "scenic", "views": "scenic", "nature": "nature", "scenery": "scenic", "beach": "beach", "beaches": "beach",
+                "adventure": "adventure", "shopping": "shopping", "market": "shopping", "bazaar": "shopping",
+                "food": "food", "cafes": "cafe/culture", "cafe": "cafe/culture", "nightlife": "nightlife",
+                "museums": "culture", "museum": "culture", "temples": "culture", "temple": "culture"
+            }
+            target_cat = cat_map.get(category_raw)
+        if not target_cat:
+            target_cat = category_raw
+            
         docs = retrieve_place_entities(destination, [target_cat], n=12)
         matching_places = [d for d in docs if d.get("category") == target_cat] or docs
         
@@ -341,14 +376,30 @@ def _fallback_refine(current_plan: dict[str, Any], user_feedback: str, structure
 
 def run_refinement_agent(current_plan: dict[str, Any], user_feedback: str, structured_query: dict) -> dict[str, Any]:
     from monitoring.logger import logger
+    import copy
     destination = structured_query.get("destination", "")
     logger.info("[Refinement Agent] Entering agent")
     logger.info(f"[Refinement Agent] Destination received: {destination}")
-    fallback = _fallback_refine(current_plan, user_feedback, structured_query)
+    
+    # Safely detect explicit category from user feedback
+    explicit_cat = detect_explicit_category(user_feedback)
+    
+    # If the user explicitly specifies a category, override interests in structured_query
+    # to avoid falling back to previous preferences
+    modified_query = copy.deepcopy(structured_query)
+    if explicit_cat:
+        modified_query["interests"] = [explicit_cat]
+        print(f"DEBUG: Explicit category '{explicit_cat}' detected. Overriding query interests to avoid previous preferences.", flush=True)
+    
+    fallback = _fallback_refine(current_plan, user_feedback, modified_query)
+    
+    result = None
+    planner_prompt = "N/A (Fallback Used)"
+    planner_output = "N/A"
     
     # Priority 2: LLM-powered refinement with fallback
-    destination = structured_query.get("destination", "")
-    interests = structured_query.get("interests", [])
+    destination = modified_query.get("destination", "")
+    interests = modified_query.get("interests", [])
     allowed = retrieve_place_entities(destination, interests, n=20)
     
     prompt = f"""
@@ -359,26 +410,66 @@ User Feedback:
 {user_feedback}
 
 Structured Query Context:
-{json.dumps(structured_query, indent=2)}
+{json.dumps(modified_query, indent=2)}
 
 Allowed Places:
 {json.dumps(allowed, indent=2)}
 """
+    planner_prompt = prompt
     try:
         from agents.common import invoke_json
-        result = invoke_json(SYSTEM_PROMPT, prompt, fallback=None, temperature=0.1)
-        if isinstance(result, dict) and "updated_itinerary" in result:
-            upd = result["updated_itinerary"]
+        res_llm = invoke_json(SYSTEM_PROMPT, prompt, fallback=None, temperature=0.1)
+        if isinstance(res_llm, dict) and "updated_itinerary" in res_llm:
+            upd = res_llm["updated_itinerary"]
             if isinstance(upd, dict) and "days" in upd:
-                if "refinement_notes" not in result:
-                    result["refinement_notes"] = []
-                result["refinement_notes"].append("LLM-powered refinement applied successfully.")
-                logger.info(f"[Refinement Agent] Destination returned: {destination}")
-                logger.info("[Refinement Agent] Leaving agent")
-                return result
-    except Exception:
-        pass
+                if "refinement_notes" not in res_llm:
+                    res_llm["refinement_notes"] = []
+                res_llm["refinement_notes"].append("LLM-powered refinement applied successfully.")
+                result = res_llm
+                planner_output = json.dumps(res_llm, indent=2)
+    except Exception as e:
+        print(f"DEBUG: LLM refinement failed: {e}", flush=True)
+        
+    if not result:
+        result = fallback
+        
+    # After obtaining result (either from LLM or fallback), prepare detailed pipeline audit trail logging
+    changed_days = result.get("changed_days", [])
+    all_days = [int(d.get("day", 1)) for d in current_plan.get("days", [])]
+    locked_days = [d for d in all_days if d not in changed_days]
+    
+    intent = result.get("modification_intent", {})
+    detected_cat = explicit_cat or intent.get("category", "N/A")
+    
+    final_itinerary = result.get("updated_itinerary", {})
+    final_days_summary = []
+    for day in final_itinerary.get("days", []):
+        day_num = day.get("day")
+        places = []
+        for slot in ["morning", "afternoon", "evening"]:
+            for item in day.get(slot, []):
+                places.append(f"{item.get('location')} ({slot})")
+        final_days_summary.append(f"  Day {day_num}: {', '.join(places)}")
+        
+    print("\n" + "="*50, flush=True)
+    print("REFINEMENT PIPELINE AUDIT TRAIL:", flush=True)
+    print(f"Input:\n{user_feedback}", flush=True)
+    print("↓", flush=True)
+    print(f"Parsed intent:\n{json.dumps(intent, indent=2)}", flush=True)
+    print("↓", flush=True)
+    print(f"Detected category:\n{detected_cat}", flush=True)
+    print("↓", flush=True)
+    print(f"Locked days:\n{locked_days}", flush=True)
+    print("↓", flush=True)
+    print(f"Mutation request:\nReplace Day {changed_days} with category {detected_cat}", flush=True)
+    print("↓", flush=True)
+    print(f"Planner prompt:\n{planner_prompt}", flush=True)
+    print("↓", flush=True)
+    print(f"Planner output:\n{planner_output if result != fallback else 'N/A (Fallback Used)'}", flush=True)
+    print("↓", flush=True)
+    print("Final itinerary:\n" + "\n".join(final_days_summary), flush=True)
+    print("="*50 + "\n", flush=True)
     
     logger.info(f"[Refinement Agent] Destination returned: {destination}")
     logger.info("[Refinement Agent] Leaving agent")
-    return fallback
+    return result

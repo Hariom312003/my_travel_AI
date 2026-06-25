@@ -98,6 +98,7 @@ def _response(result: dict) -> dict:
     }
     return {
         "status": result.get("status", "success"),
+        "destination": destination,
         "current_state": current_state,
         "structured_query": result.get("structured_query", {}),
         "itinerary": clean_text,

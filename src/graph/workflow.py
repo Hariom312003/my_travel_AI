@@ -98,7 +98,7 @@ def node_parse_query(state: TravelState) -> TravelState:
         "success_status": llm_info.get("success_status", "Success")
     }
     
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Query Agent"] = metrics
     
     dest_extracted = structured.get("destination", "")
@@ -168,7 +168,7 @@ def node_retrieve_memory(state: TravelState) -> TravelState:
         "model": "local-embedding-v3",
         "prompt_size": len(state.get("raw_query", ""))
     }
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Memory Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -226,7 +226,7 @@ def node_retrieve_destination_rag(state: TravelState) -> TravelState:
         "success_status": llm_info.get("success_status", "Success")
     }
     
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Destination Agent"] = metrics
     
     dest_in = destination
@@ -284,7 +284,7 @@ def node_plan_itinerary(state: TravelState) -> TravelState:
         "success_status": llm_info.get("success_status", "Success")
     }
     
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Planner Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -329,7 +329,7 @@ def node_validate_itinerary(state: TravelState) -> TravelState:
         "model": "grounding-rules",
         "prompt_size": len(text)
     }
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Validator Agent"] = metrics
     
     # Track validation retry count
@@ -393,7 +393,7 @@ def node_refine_itinerary(state: TravelState) -> TravelState:
         "failover_count": llm_info.get("failover_count", 0),
         "success_status": llm_info.get("success_status", "Success")
     }
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Refinement Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -406,16 +406,23 @@ def node_refine_itinerary(state: TravelState) -> TravelState:
     print(f"output destination: {dest_out}", flush=True)
     print("="*40 + "\n", flush=True)
     
+    intent = result.get("modification_intent", {})
+    import copy
+    sq = copy.deepcopy(state.get("structured_query", {}))
+    if "category" in intent:
+        sq["interests"] = [intent["category"]]
+        
     return {
         **state,
         "session_memory": {
             "feedback": state["user_feedback"],
-            "modification_intent": result.get("modification_intent", {}),
+            "modification_intent": intent,
         },
         "refined_itinerary_json": plan,
         "refined_itinerary": itinerary_to_text(plan),
-        "modification_intent": result.get("modification_intent", {}),
+        "modification_intent": intent,
         "changed_days": result.get("changed_days", []),
+        "structured_query": sq,
         "agent_metrics": agent_metrics,
         "status": "itinerary_refined",
     }
@@ -448,7 +455,7 @@ def node_estimate_budget(state: TravelState) -> TravelState:
         "success_status": llm_info.get("success_status", "Success")
     }
     
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Budget Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -490,7 +497,7 @@ def node_optimize_rewards(state: TravelState) -> TravelState:
         "failover_count": llm_info.get("failover_count", 0),
         "success_status": llm_info.get("success_status", "Success")
     }
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Rewards Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -554,7 +561,7 @@ def node_generate_summary(state: TravelState) -> TravelState:
         "success_status": llm_info.get("success_status", "Success")
     }
     
-    agent_metrics = dict(state.get("agent_metrics", {}))
+    agent_metrics = dict(state.get("agent_metrics")) if isinstance(state.get("agent_metrics"), dict) else {}
     agent_metrics["Summary Agent"] = metrics
     
     dest_in = state.get("destination") or state.get("structured_query", {}).get("destination", "")
@@ -579,7 +586,7 @@ def node_generate_summary(state: TravelState) -> TravelState:
 # ── Build graph ──────────────────────────────
 def route_travel_validation(state: TravelState):
     report = state.get("validation_report", {})
-    retry_count = state.get("agent_metrics", {}).get("validation_retry_count", 0)
+    retry_count = (state.get("agent_metrics") if isinstance(state.get("agent_metrics"), dict) else {}).get("validation_retry_count", 0)
     if not report.get("is_valid", True) and retry_count < 2:
         print(f"\n[Workflow] Validation failed! Routing back to plan_itinerary (Retry {retry_count}/2)...", flush=True)
         return "plan_itinerary"
@@ -587,7 +594,7 @@ def route_travel_validation(state: TravelState):
 
 def route_refinement_validation(state: TravelState):
     report = state.get("validation_report", {})
-    retry_count = state.get("agent_metrics", {}).get("validation_retry_count", 0)
+    retry_count = (state.get("agent_metrics") if isinstance(state.get("agent_metrics"), dict) else {}).get("validation_retry_count", 0)
     if not report.get("is_valid", True) and retry_count < 2:
         print(f"\n[Workflow] Validation failed! Routing back to refine_itinerary (Retry {retry_count}/2)...", flush=True)
         return "refine_itinerary"

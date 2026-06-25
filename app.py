@@ -1309,68 +1309,114 @@ else:
             st.markdown("Production monitoring logging and latency tracing panel.")
             
             agent_metrics = state.get("agent_metrics", {})
-            if agent_metrics:
-                total_latency = sum(m.get("latency", 0.0) for m in agent_metrics.values())
-                perf = {
-                    "Request ID": f"tx_{uuid_hash(user_id)}_{uuid_hash(state.get('destination', ''))}",
-                    "Total Execution Time": f"{round(total_latency, 2)} sec",
-                    "RAG Retrieval Latency": f"{agent_metrics.get('Destination Agent', {}).get('latency', 0.0)} sec" if "Destination Agent" in agent_metrics else "0.0 sec",
-                    "Memory Retrieval Latency": f"{agent_metrics.get('Memory Agent', {}).get('latency', 0.0)} sec" if "Memory Agent" in agent_metrics else "0.0 sec",
-                    "agents": {}
-                }
-                for agent_display, key_in_metrics in [
-                    ("Query Agent", "Query Agent"),
-                    ("Memory Agent", "Memory Agent"),
-                    ("RAG Agent", "Destination Agent"),
-                    ("Planner Agent", "Planner Agent"),
-                    ("Validator Agent", "Validator Agent"),
-                    ("Budget Agent", "Budget Agent"),
-                    ("Rewards Agent", "Rewards Agent"),
-                    ("Refinement Agent", "Refinement Agent"),
-                    ("Summary Agent", "Summary Agent")
-                ]:
-                    m = agent_metrics.get(key_in_metrics, {})
-                    if m:
-                        perf["agents"][agent_display] = {
-                            "status": "Completed",
-                            "latency": f"{m.get('latency', 0.0)} sec"
-                        }
-                    else:
-                        perf["agents"][agent_display] = {
-                            "status": "Idle",
-                            "latency": "0 ms"
-                        }
+            
+            # Print the exact runtime structure of agent_metrics before any operation
+            print("--- DEBUG START: agent_metrics runtime structure ---", flush=True)
+            print(f"Type: {type(agent_metrics)}", flush=True)
+            print(f"Value: {repr(agent_metrics)}", flush=True)
+            if isinstance(agent_metrics, dict):
+                for k, v in agent_metrics.items():
+                    print(f"  Key: {repr(k)}, Value Type: {type(v)}, Value: {repr(v)}", flush=True)
+            print("--- DEBUG END: agent_metrics runtime structure ---", flush=True)
+            
+            perf = None
+            metrics_available = False
+            
+            if isinstance(agent_metrics, dict) and agent_metrics:
+                try:
+                    # Filter out non-dict items for safety (e.g. validation_retry_count)
+                    total_latency = sum(
+                        m.get("latency", 0.0)
+                        for m in agent_metrics.values()
+                        if isinstance(m, dict)
+                    )
+                    
+                    def get_agent_latency_str(agent_key):
+                        m = agent_metrics.get(agent_key)
+                        if isinstance(m, dict):
+                            return f"{m.get('latency', 0.0)} sec"
+                        return "0.0 sec"
+                    
+                    perf = {
+                        "Request ID": f"tx_{uuid_hash(user_id)}_{uuid_hash(state.get('destination', ''))}",
+                        "Total Execution Time": f"{round(total_latency, 2)} sec",
+                        "RAG Retrieval Latency": get_agent_latency_str("Destination Agent"),
+                        "Memory Retrieval Latency": get_agent_latency_str("Memory Agent"),
+                        "agents": {}
+                    }
+                    for agent_display, key_in_metrics in [
+                        ("Query Agent", "Query Agent"),
+                        ("Memory Agent", "Memory Agent"),
+                        ("RAG Agent", "Destination Agent"),
+                        ("Planner Agent", "Planner Agent"),
+                        ("Validator Agent", "Validator Agent"),
+                        ("Budget Agent", "Budget Agent"),
+                        ("Rewards Agent", "Rewards Agent"),
+                        ("Refinement Agent", "Refinement Agent"),
+                        ("Summary Agent", "Summary Agent")
+                    ]:
+                        m = agent_metrics.get(key_in_metrics)
+                        if isinstance(m, dict):
+                            perf["agents"][agent_display] = {
+                                "status": "Completed",
+                                "latency": f"{m.get('latency', 0.0)} sec"
+                            }
+                        else:
+                            perf["agents"][agent_display] = {
+                                "status": "Idle",
+                                "latency": "0 ms"
+                            }
+                    metrics_available = True
+                except Exception as e:
+                    print(f"Error parsing agent_metrics: {e}", flush=True)
+                    metrics_available = False
+            
+            if not metrics_available:
+                try:
+                    fallback_perf = parse_agent_performance(user_id, state.get("destination", ""))
+                    if isinstance(fallback_perf, dict) and fallback_perf:
+                        perf = fallback_perf
+                        metrics_available = True
+                except Exception as e:
+                    print(f"Error calling parse_agent_performance: {e}", flush=True)
+                    metrics_available = False
+                    
+            if not metrics_available or not perf:
+                st.warning("Metrics unavailable")
             else:
-                perf = parse_agent_performance(user_id, state.get("destination", ""))
-            
-            # Show summary stats
-            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-            with col_p1:
-                st.metric("Request ID", perf["Request ID"])
-            with col_p2:
-                st.metric("Total Execution Time", perf["Total Execution Time"])
-            with col_p3:
-                st.metric("RAG Retrieval Latency", perf["RAG Retrieval Latency"])
-            with col_p4:
-                st.metric("Memory Retrieval Latency", perf["Memory Retrieval Latency"])
+                # Show summary stats
+                col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+                with col_p1:
+                    st.metric("Request ID", perf.get("Request ID", "N/A"))
+                with col_p2:
+                    st.metric("Total Execution Time", perf.get("Total Execution Time", "N/A"))
+                with col_p3:
+                    st.metric("RAG Retrieval Latency", perf.get("RAG Retrieval Latency", "N/A"))
+                with col_p4:
+                    st.metric("Memory Retrieval Latency", perf.get("Memory Retrieval Latency", "N/A"))
+                    
+                st.divider()
                 
-            st.divider()
-            
-            # Agent Timings Grid
-            st.markdown("#### Agent Execution Latencies (Real Latency Tracing)")
-            for agent, data in perf["agents"].items():
-                status_color = "#22c55e" if data["status"] == "Completed" else "#94a3b8"
-                st.markdown(f"""
-                <div class='glass-card' style='padding: 14px 20px; margin: 8px 0; display:flex; justify-content:space-between; align-items:center;'>
-                    <div>
-                        <strong style='font-size:16px; color:#f1f5f9;'>🤖 {agent}</strong><br>
-                        <span style='font-size:11px; color:#64748b;'>Status: <b style='color:{status_color};'>{data["status"]}</b></span>
-                    </div>
-                    <div style='font-size:18px; font-weight:bold; color:#7b8cde;'>{data["latency"]}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                # Agent Timings Grid
+                st.markdown("#### Agent Execution Latencies (Real Latency Tracing)")
+                agents_dict = perf.get("agents", {})
+                if isinstance(agents_dict, dict):
+                    for agent, data in agents_dict.items():
+                        if isinstance(data, dict):
+                            status_val = data.get("status", "Idle")
+                            latency_val = data.get("latency", "0 ms")
+                            status_color = "#22c55e" if status_val == "Completed" else "#94a3b8"
+                            st.markdown(f"""
+                            <div class='glass-card' style='padding: 14px 20px; margin: 8px 0; display:flex; justify-content:space-between; align-items:center;'>
+                                <div>
+                                    <strong style='font-size:16px; color:#f1f5f9;'>🤖 {agent}</strong><br>
+                                    <span style='font-size:11px; color:#64748b;'>Status: <b style='color:{status_color};'>{status_val}</b></span>
+                                </div>
+                                <div style='font-size:18px; font-weight:bold; color:#7b8cde;'>{latency_val}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
                 
-            if agent_metrics:
+            if isinstance(agent_metrics, dict) and agent_metrics and any(isinstance(v, dict) for v in agent_metrics.values()):
                 st.divider()
                 st.markdown("#### 🔍 LLM Reasoning Traces & Explainability Audit")
                 st.markdown("Detailed breakdown of LLM provider execution, prompt sizes, and actual latency.")
@@ -1392,9 +1438,9 @@ else:
                     row_agents = agents_to_show[r_idx:r_idx+3]
                     trace_cols = st.columns(3)
                     for col, (display_name, key) in zip(trace_cols, row_agents):
-                        metric = agent_metrics.get(key, {})
+                        metric = agent_metrics.get(key)
                         with col:
-                            if metric:
+                            if isinstance(metric, dict):
                                 st.markdown(f"""
                                 <div class='glass-card' style='margin:8px 0; height:100%; min-height:165px; padding:15px;'>
                                     <span style='color:#cbd5e1; font-size:13px; font-weight:600;'>🤖 {display_name}</span>

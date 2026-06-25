@@ -54,7 +54,7 @@ def verify_trip(dest: str, res: dict) -> dict:
     warnings = []
     
     # 1. Resolved destination matches requested destination
-    resolved_dest = res.get("destination", "")
+    resolved_dest = res.get("destination") or res.get("current_state", {}).get("destination", "") or ""
     if resolved_dest.lower() != dest.lower():
         errors.append(f"Destination mismatch: requested '{dest}', resolved '{resolved_dest}'")
         
@@ -153,12 +153,14 @@ def verify_trip(dest: str, res: dict) -> dict:
     model = "mock-model"
     gen_time = 0.0
     
-    if metrics:
+    if isinstance(metrics, dict) and metrics:
         planner_metrics = metrics.get("Planner Agent", {})
+        if not isinstance(planner_metrics, dict):
+            planner_metrics = {}
         provider = planner_metrics.get("provider", "Gemini")
         model = planner_metrics.get("model", "gemini-2.5-flash")
         # Total latency is sum of all node latencies
-        gen_time = sum(m.get("latency", 0.0) for m in metrics.values())
+        gen_time = sum(m.get("latency", 0.0) for m in metrics.values() if isinstance(m, dict))
         
     return {
         "status": "PASS" if not errors else "FAIL",

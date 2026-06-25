@@ -294,7 +294,17 @@ def validate_itinerary(
                         
                     # Pick unique replacement
                     if docs:
-                        replacement_doc = _pick_replacement(docs, global_used_locations)
+                        day_theme = day.get("theme", "").lower()
+                        preferred_cat = None
+                        for cat in ["adventure", "nightlife", "cafe", "beach", "nature", "scenic", "shopping", "food", "culture"]:
+                            if cat in day_theme or (cat == "cafe" and "cafe" in day_theme):
+                                preferred_cat = "cafe/culture" if cat == "cafe" else cat
+                                break
+                        if not preferred_cat:
+                            interests = structured_query.get("interests", [])
+                            if interests:
+                                preferred_cat = interests[0]
+                        replacement_doc = _pick_replacement(docs, global_used_locations, preferred_category=preferred_cat)
                         replacement = _replacement_item(replacement_doc, slot, day_number, relaxed)
                         replacement_name = replacement_doc.get("name", "")
                         rep_category = replacement_doc.get("category", "experience")
@@ -360,6 +370,10 @@ def validate_itinerary(
             day_number = int(day.get("day", 1))
             if changed_days_allowed and day_number not in changed_days_allowed:
                 continue
+            if changed_days_allowed and day_number in changed_days_allowed:
+                day_theme = day.get("theme", "").lower()
+                if any(cat in day_theme for cat in ["adventure", "nightlife", "cafe", "beach", "nature", "scenic", "shopping", "food"]):
+                    continue
             evening = day.get("evening", [])
             if not evening:
                 continue
